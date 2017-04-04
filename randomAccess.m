@@ -39,16 +39,16 @@ for it = sicPar.minIter:sicPar.maxIter
 
     maxIter = it;
 
-    ackdPacketCount          = 0;
-    pcktTransmissionAttempts = 0;
-    pcktCollisionCount       = 0;
+    % ackdPacketCount          = 0;
+    % pcktTransmissionAttempts = 0;
+    % pcktCollisionCount       = 0;
     source.status            = zeros(1,source.number);
     % legit source statuses are always non-negative integers and equal to:
     % 0: source has no packet ready to be transmitted (is idle)
     % 1: source has a packet ready to be transmitted, either because new data must be sent or a previously collided packet has waited the backoff time
     % integer greater than 1: source is backlogged due to previous packets collision, the integer value corresponds to the number of attempts made to get the latest burst acknowledged
     source.backoff           = zeros(1,source.number); % probably useless
-    pcktGenerationTimestamp  = zeros(1,source.number);
+    % pcktGenerationTimestamp  = zeros(1,source.number);
     output.duration          = 0;
 
         switch input.linkMode
@@ -69,79 +69,75 @@ for it = sicPar.minIter:sicPar.maxIter
                     raf.status      = zeros(source.number,raf.length); % memoryless
                     raf.slotStatus  = int8(zeros(1,raf.length));
                     raf.twins       = cell(source.number,raf.length);
-                    changedSlots    = 0;
+                    % changedSlots    = 0;
 
-                % create the RAF
-                % TODO: update with correct number of bursts after testing [Issue: https://github.com/afcuttin/jsac/issues/2]
-                numberOfBursts = 3; % CSA method
-                numberOfBursts = 2; % for testing purposes
-                for eachSource1 = 1:source.number
-                    if queues.status(eachSource1) > 0
-                        if source.status(1,eachSource1) == 0 % a new burst can be sent
-                            source.status(1,eachSource1)      = 1;
-                            [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
-                            raf.status(eachSource1,pcktTwins) = 1;
-                            raf.twins(eachSource1,:)          = rafRow;
-                        elseif source.status(1,eachSource1) >= 1 && source.status(1,eachSource1) <= input.burstMaxRepetitions  % backlogged source
-                            source.status(1,eachSource1)      = source.status(1,eachSource1) + 1;
-                            [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
-                            raf.status(eachSource1,pcktTwins) = 1;
-                            raf.twins(eachSource1,:)          = rafRow;
-                        elseif source.status(1,eachSource1) > input.burstMaxRepetitions  % backlogged source, reached maximum number of attempts, discard backlogged burst
-                            % decidere se fare qui lo scarto del pacchetto, o più avanti, quando si fa la verifica di quelli confermati
-                            % marcare a 0 la posizione corrispondente al pacchetto scartato
-                            % decrementare il contatore della coda dei pacchetti in ingresso
-                            % procedere con una nuova trasmissione
-                            source.status(1,eachSource1)      = 1;
-                            [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
-                            raf.status(eachSource1,pcktTwins) = 1;
-                            raf.twins(eachSource1,:)          = rafRow;
+                    % create the RAF
+                    % TODO: update with correct number of bursts after testing [Issue: https://github.com/afcuttin/jsac/issues/2]
+                    numberOfBursts = 3; % CSA method
+                    numberOfBursts = 2; % for testing purposes
+                    for eachSource1 = 1:source.number
+                        if queues.status(eachSource1) > 0
+                            if source.status(1,eachSource1) == 0 % a new burst can be sent
+                                source.status(1,eachSource1)      = 1;
+                                [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
+                                raf.status(eachSource1,pcktTwins) = 1;
+                                raf.twins(eachSource1,:)          = rafRow;
+                            elseif source.status(1,eachSource1) >= 1 && source.status(1,eachSource1) <= input.burstMaxRepetitions  % backlogged source
+                                source.status(1,eachSource1)      = source.status(1,eachSource1) + 1;
+                                [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
+                                raf.status(eachSource1,pcktTwins) = 1;
+                                raf.twins(eachSource1,:)          = rafRow;
+                            elseif source.status(1,eachSource1) > input.burstMaxRepetitions  % backlogged source, reached maximum number of attempts, discard backlogged burst
+                                % decidere se fare qui lo scarto del pacchetto, o più avanti, quando si fa la verifica di quelli confermati
+                                % marcare a 0 la posizione corrispondente al pacchetto scartato
+                                % decrementare il contatore della coda dei pacchetti in ingresso
+                                % procedere con una nuova trasmissione
+                                source.status(1,eachSource1)      = 1;
+                                [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
+                                raf.status(eachSource1,pcktTwins) = 1;
+                                raf.twins(eachSource1,:)          = rafRow;
+                            end
                         end
                     end
+
+                    % acked.slot   = [];
+                    acked.source = [];
+                    iter         = 0;
+                    enterTheLoop = true;
+
+                    while (sum(raf.slotStatus) > 0 && iter <= maxIter) || enterTheLoop
+                        enterTheLoop = false;
+                        % decoding
+                        [decRaf,decAcked] = decoding(raf,capturePar);
+                        % update acked bursts list
+                        % acked.slot   = [acked.slot,decAcked.slot];
+                        acked.source = [acked.source,decAcked.source];
+                        % perform interference cancellation
+                        icRaf = ic(decRaf,sicPar,decAcked);
+                        % start again
+                        raf = icRaf;
+                        iter = iter + 1;
+                    end
+
+                    % check for duplicates
+                    count = histc(acked.source,unique(acked.source));
+                    duplicatesExist = sum(count > 1) > 0;
+                    assert(~duplicatesExist,'Error in the Successive Interference Cancellation process: one or more sources are acknowledged more than once');
+
+                    % pcktTransmissionAttempts = pcktTransmissionAttempts + sum(source.status == 1); % "the normalized MAC load G does not take into account the replicas" Casini et al., 2007, pag.1411; "The performance parameter is throughput (measured in useful packets received per slot) vs. load (measured in useful packets transmitted per slot" Casini et al., 2007, pag.1415
+                    % ackdPacketCount = ackdPacketCount + numel(acked.source);
+
+                    % update the packets' status
+                    output.matrix(sub2ind([input.sources input.queueLength] , transpose(acked.source) , queues.status([acked.source]))) = output.matrix(sub2ind([input.sources input.queueLength] , transpose(acked.source) , queues.status([acked.source]))) + 1;
+
+                    % TODO: inserire tentativi di ritrasmissione se il pacchetto non è confermato [Issue: https://github.com/afcuttin/jsac/issues/1]
+                    % update the transmission queues
+                    % queues.status([acked.source]) = queues.status([acked.source]) - 1;
+                    % memoryless process (no retransmission attempts)
+                    queues.status = queues.status - 1;
+                    source.status = source.status - 1; % update sources statuses
+                    source.status(source.status < 0) = 0; % idle sources stay idle (see permitted statuses above)
                 end
-
-                % acked.slot   = [];
-                acked.source = [];
-                iter         = 0;
-                enterTheLoop = true;
-
-                while (sum(raf.slotStatus) > 0 && iter <= maxIter) || enterTheLoop
-                    enterTheLoop = false;
-                    % decoding
-                    [decRaf,decAcked] = decoding(raf,capturePar);
-                    % update acked bursts list
-                    % acked.slot   = [acked.slot,decAcked.slot];
-                    acked.source = [acked.source,decAcked.source];
-                    % perform interference cancellation
-                    icRaf = ic(decRaf,sicPar,decAcked);
-                    % start again
-                    raf = icRaf;
-                    iter = iter + 1;
-                end
-
-                % check for duplicates
-                count = histc(acked.source,unique(acked.source));
-                duplicatesExist = sum(count > 1) > 0;
-                assert(~duplicatesExist,'Error in the Successive Interference Cancellation process: one or more sources are acknowledged more than once');
-
-                % pcktTransmissionAttempts = pcktTransmissionAttempts + sum(source.status == 1); % "the normalized MAC load G does not take into account the replicas" Casini et al., 2007, pag.1411; "The performance parameter is throughput (measured in useful packets received per slot) vs. load (measured in useful packets transmitted per slot" Casini et al., 2007, pag.1415
-                % ackdPacketCount = ackdPacketCount + numel(acked.source);
-
-acked.source
-queues.status([acked.source])
-
-                % update the packets' status
-                output.matrix([sub2ind([input.sources input.queueLength] , transpose(acked.source) , queues.status([acked.source]))]) = output.matrix([sub2ind([input.sources input.queueLength] , transpose(acked.source) , queues.status([acked.source]))]) + 1;
-
-                % TODO: inserire tentativi di ritrasmissione se il pacchetto non è confermato [Issue: https://github.com/afcuttin/jsac/issues/1]
-                % update the transmission queues
-                % queues.status([acked.source]) = queues.status([acked.source]) - 1;
-                % memoryless process (no retransmission attempts)
-                queues.status = queues.status - 1;
-                source.status = source.status - 1; % update sources statuses
-                source.status(source.status < 0) = 0; % idle sources stay idle (see permitted statuses above)
-
-            end
 
             case 'sul' % random access method is CRDSA
 
@@ -184,10 +180,10 @@ queues.status([acked.source])
                 % TODO: completare Satellite Downlink [Issue: https://github.com/afcuttin/jsac/issues/6]
                 % TODO: completare Terrestrial Downlink [Issue: https://github.com/afcuttin/jsac/issues/5]
 
-                if input.linkMode == 'sdl'
+                if strcmp(input.linkMode,'sdl')
                     load('Captures_SDL','C_SDL');
                     capturePar.probability = C_SDL;
-                elseif input.linkMode == 'tdl'
+                elseif strcmp(input.linkMode,'tdl')
                     load('Captures_TDL','C_TDL');
                     capturePar.probability = C_TDL;
                 end
