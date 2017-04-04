@@ -113,7 +113,8 @@ for it = sicPar.minIter:sicPar.maxIter
                         % acked.slot   = [acked.slot,decAcked.slot];
                         acked.source = [acked.source,decAcked.source];
                         % perform interference cancellation
-                        icRaf = ic(decRaf,sicPar,decAcked);
+                        icRaf = ic(decRaf,decAcked);
+                        % icRaf = ic(decRaf,sicPar,decAcked);
                         % start again
                         raf = icRaf;
                         iter = iter + 1;
