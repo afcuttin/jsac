@@ -9,11 +9,13 @@ function [output] = randomAccess(input)
 % * input.linkMode: can be one of the following: 'tul', terrestrial uplink, 'sul', satellite UL, 'sdl', satellite downlink, 'tdl', terrestrial DL (type: string)
 % * input.sinrThreshold: value of the SINR threshold to be used (type: integer)
 % * input.rafLength: the length of the random access frame (RAF) (type: integer)
+% * input.bitsPerSymbol: depends on the modulation scheme (type: integer)
+% * input.fecRate: Forwar Error Correctin rate; depends on the modulation scheme (type: double)
 %
 % Output
 %
 % output.queues: a logical matrix of input.sources rows and input.queueLength columns where each cell is set to 1 if the packet was successfully decoded or 0 if it was not
-% output.duration: the number of RAFs that have been generated to process all the input queues
+% output.duration: the number of RAFs that have been generated to process all the input queues, needed to compute the average load and throughput
 
 queues.status        = input.queueLength * ones(input.sources,1);
 output.matrix        = zeros(input.sources,input.queueLength);
@@ -25,13 +27,19 @@ raf.length           = input.rafLength; % Casini et al., 2007, pag.1413
 % simulationTime     = 10; % for TEST purposes only - comment when doing the real thing
 % capturePar.status    = 3;
 % sicPar.maxIter     = 16;
-sicPar.maxIter       = 4;
-sicPar.minIter       = 4;
+sicPar.maxIter       = 1;
+sicPar.minIter       = 1;
 % capturePar.criterion = 'power';
 % capturePar.type      = 'basic';
 
 % TODO: define modulation key parameters (bitrate, bandwidth, modulation scheme, code rate) [Issue: https://github.com/afcuttin/jsac/issues/9]
 % TODO: introduce the evaluation of the capture threshold as a function of the code rate and the number of bits per symbol of the selected modulation [Issue: https://github.com/afcuttin/jsac/issues/7]
+if strcmp(input.linkMode,'tul')
+    capturePar.threshold = input.bitsPerSymbol * input.fecRate;
+elseif strcmp(input.linkMode,'tdl') || strcmp(input.linkMode,'sdl') || strcmp(input.linkMode,'sul')
+    capturePar.threshold = 2^(input.bitsPerSymbol * input.fecRate) - 1;
+end
+% TODO: delete following line after testing [Issue: https://github.com/afcuttin/jsac/issues/10]
 capturePar.threshold = 14; % the value of the parameter is obtained as follows: thr_val_dB + 11 = capturePar.threshold; thr_val_dB values are -10:1:10
 
 % the following for cycle should go away
@@ -76,6 +84,7 @@ for it = sicPar.minIter:sicPar.maxIter
                     numberOfBursts = 3; % CSA method
                     numberOfBursts = 2; % for testing purposes
                     for eachSource1 = 1:source.number
+                        % TODO: inserire esperimento aleatorio per la scelta  del numero di pacchetti (come in IRSA) [Issue: https://github.com/afcuttin/jsac/issues/11]
                         if queues.status(eachSource1) > 0
                             if source.status(1,eachSource1) == 0 % a new burst can be sent
                                 source.status(1,eachSource1)      = 1;
@@ -88,14 +97,21 @@ for it = sicPar.minIter:sicPar.maxIter
                                 raf.status(eachSource1,pcktTwins) = 1;
                                 raf.twins(eachSource1,:)          = rafRow;
                             elseif source.status(1,eachSource1) > input.burstMaxRepetitions  % backlogged source, reached maximum number of attempts, discard backlogged burst
-                                % decidere se fare qui lo scarto del pacchetto, o più avanti, quando si fa la verifica di quelli confermati
-                                % marcare a 0 la posizione corrispondente al pacchetto scartato
-                                % decrementare il contatore della coda dei pacchetti in ingresso
-                                % procedere con una nuova trasmissione
-                                source.status(1,eachSource1)      = 1;
-                                [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
-                                raf.status(eachSource1,pcktTwins) = 1;
-                                raf.twins(eachSource1,:)          = rafRow;
+                                if queues.status(eachSource1) > 1
+                                    queues.status(eachSource1)        = queues.status(eachSource1) - 1; % permanently drop unconfirmed packet
+                                    % proceed with the transmission of the next packet in the queue
+                                    source.status(1,eachSource1)      = 1;
+                                    [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
+                                    raf.status(eachSource1,pcktTwins) = 1;
+                                    raf.twins(eachSource1,:)          = rafRow;
+                                elseif queues.status(eachSource1) == 1
+                                    % backlogged source, reached maximum number of attempts, discard backlogged burst, which is also the last in the queue
+                                    queues.status(eachSource1)   = queues.status(eachSource1) - 1;
+                                    assert(queues.status(eachSource1) >= 0,'negative queue status');
+                                    source.status(1,eachSource1) = 0;
+                                end
+                            else
+                                error('Unlegit sourse status.');
                             end
                         end
                     end
@@ -114,7 +130,6 @@ for it = sicPar.minIter:sicPar.maxIter
                         acked.source = [acked.source,decAcked.source];
                         % perform interference cancellation
                         icRaf = ic(decRaf,decAcked);
-                        % icRaf = ic(decRaf,sicPar,decAcked);
                         % start again
                         raf = icRaf;
                         iter = iter + 1;
@@ -128,16 +143,22 @@ for it = sicPar.minIter:sicPar.maxIter
                     % pcktTransmissionAttempts = pcktTransmissionAttempts + sum(source.status == 1); % "the normalized MAC load G does not take into account the replicas" Casini et al., 2007, pag.1411; "The performance parameter is throughput (measured in useful packets received per slot) vs. load (measured in useful packets transmitted per slot" Casini et al., 2007, pag.1415
                     % ackdPacketCount = ackdPacketCount + numel(acked.source);
 
-                    % update the packets' status
-                    output.matrix(sub2ind([input.sources input.queueLength] , transpose(acked.source) , queues.status([acked.source]))) = output.matrix(sub2ind([input.sources input.queueLength] , transpose(acked.source) , queues.status([acked.source]))) + 1;
+                    % fprintf('Acked sources %f \n',acked.source);
+                    % fprintf('Queues status %f \n',queues.status);
+                    fprintf('Acked sources\n');
+                    acked.source
+                    fprintf('Queues status\n');
+                    queues.status
+                    % update the confirmed packets' status
+                    output.matrix(sub2ind([input.sources input.queueLength],transpose(acked.source),queues.status([acked.source]))) = 1;
 
-                    % TODO: inserire tentativi di ritrasmissione se il pacchetto non è confermato [Issue: https://github.com/afcuttin/jsac/issues/1]
                     % update the transmission queues
-                    % queues.status([acked.source]) = queues.status([acked.source]) - 1;
-                    % memoryless process (no retransmission attempts)
-                    queues.status = queues.status - 1;
-                    source.status = source.status - 1; % update sources statuses
+                    queues.status([acked.source]) = queues.status([acked.source]) - 1;
+                    source.status([acked.source]) = 0; % update sources statuses
                     source.status(source.status < 0) = 0; % idle sources stay idle (see permitted statuses above)
+                    % memoryless process (no retransmission attempts)
+                    % queues.status = queues.status - 1;
+                    % source.status = source.status - 1; % update sources statuses
                 end
 
             case 'sul' % random access method is CRDSA
