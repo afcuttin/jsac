@@ -11,7 +11,5 @@ function [pcktTwins,rafRow] = generateTwins(randomAccessFrameLength,numberOfTwin
 rafRow = cell(1,randomAccessFrameLength);
 pcktTwins = randperm(randomAccessFrameLength,numberOfTwins);
 for i = 1:length(pcktTwins)
-	% twinsPointers = pcktTwins;
-	% twinsPointers(i) = [];
 	rafRow{pcktTwins(i)} = pcktTwins([1:i-1 i+1:end]);
 end

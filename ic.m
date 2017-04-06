@@ -13,8 +13,8 @@ function [outRandomAccessFrame] = ic(raf,receivedBursts)
 for ii = 1:numel(receivedBursts.slot)
     twinPcktCol = raf.twins{ receivedBursts.source(ii),receivedBursts.slot(ii) };
     for twinPcktIdx = 1:length(twinPcktCol)
-        raf.status(receivedBursts.source(ii),twinPcktCol(twinPcktIdx))        = 0; % interference cancelation
-        raf.slotStatus(twinPcktCol(twinPcktIdx)) = 2;
+        raf.status(receivedBursts.source(ii),twinPcktCol(twinPcktIdx)) = 0; % interference cancelation
+        raf.slotStatus(twinPcktCol(twinPcktIdx))                       = 2;
     end
 end
 
