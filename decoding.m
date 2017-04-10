@@ -1,6 +1,6 @@
 function [outRandomAccessFrame,ackedBursts] = decoding(raf,capture)
 % function [outputRandomAccessFrame,ackedPcktsCol,ackedPcktsRow] = capture(inputRandomAccessFrame,,capture)
-% TODO: update decoding function help
+% TODO: update decoding function help [Issue: https://github.com/afcuttin/jsac/issues/14]
 %
 % perform Successive Interference Cancellation (SIC) on a given Random Access Frame for Contention Resolution Diversity Slotted Aloha
 %
@@ -27,17 +27,19 @@ for si = 1:raf.length
         % captureRatiodB = 10 * log10(raf.receivedPower(captured,si) / sum(raf.receivedPower([1:end ~= captured],si)));
         % if captureRatiodB >= capture.threshold && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source)
         captureExperiment = rand(1);
+        % TODO: introdurre una condizione per controllare che il pacchetto scelto non sia nella blacklist [Issue: https://github.com/afcuttin/jsac/issues/16]
         if captureExperiment <= capture.probability(numCollided,capture.threshold) && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source)
             % update the list of acked bursts
             ackedBursts.slot   = [ackedBursts.slot,si];
             ackedBursts.source = [ackedBursts.source,captured];
             % update the raf
             raf.status(captured,si)        = 0;
-            % raf.receivedPower(captured,si) = capture.sicResidual * raf.receivedPower(captured,si); % TODO: il pacchetto catturato che residuo lascia? leggere zanella-zorzi
+            % raf.receivedPower(captured,si) = capture.sicResidual * raf.receivedPower(captured,si);
             % sir has changed, update the slot status
             raf.slotStatus(si) = 2;
         elseif captureExperiment > capture.probability(numCollided,capture.threshold) || raf.status(captured,si) ~= 1 || ismember(captured,ackedBursts.source)
             % niente da fare
+            % TODO: aggiornare una liste di pacchetto/sorgente proibita che non può più essere scelta alla riga 29 [Issue: https://github.com/afcuttin/jsac/issues/13]
             raf.slotStatus(si) = 0;
         else
             error('Something bad happened');

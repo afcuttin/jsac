@@ -50,13 +50,12 @@ sicPar.minIter       = 1;
 % capturePar.criterion = 'power';
 % capturePar.type      = 'basic';
 
-% TODO: define modulation key parameters (bitrate, bandwidth, modulation scheme, code rate) [Issue: https://github.com/afcuttin/jsac/issues/9]
-% TODO: introduce the evaluation of the capture threshold as a function of the code rate and the number of bits per symbol of the selected modulation [Issue: https://github.com/afcuttin/jsac/issues/7]
-if strcmp(input.linkMode,'tul')
-    capturePar.threshold = input.bitsPerSymbol * input.fecRate;
-elseif strcmp(input.linkMode,'tdl') || strcmp(input.linkMode,'sdl') || strcmp(input.linkMode,'sul')
-    capturePar.threshold = 2^(input.bitsPerSymbol * input.fecRate) - 1;
-end
+% if strcmp(input.linkMode,'tul')
+%     capturePar.threshold = input.bitsPerSymbol * input.fecRate;
+% elseif strcmp(input.linkMode,'tdl') || strcmp(input.linkMode,'sdl') || strcmp(input.linkMode,'sul')
+%     capturePar.threshold = 2^(input.bitsPerSymbol * input.fecRate) - 1;
+% end
+
 % TODO: delete following line after testing [Issue: https://github.com/afcuttin/jsac/issues/10]
 capturePar.threshold = 14; % the value of the parameter is obtained as follows: thr_val_dB + 11 = capturePar.threshold; thr_val_dB values are -10:1:10
 
@@ -170,10 +169,8 @@ for it = sicPar.minIter:sicPar.maxIter
                     fprintf('Queues status\n');
                     queues.status
                     % update the confirmed packets' status
-                    % TODO: se input.queueLength è un vettore 'Dimensions of matrices being concatenated are not consistent.' [Issue: https://github.com/afcuttin/jsac/issues/20]
                     % output.queues(sub2ind([input.sources max(input.queueLength)],transpose(acked.source),queues.status([acked.source]))) = 1;
                     output.queues(sub2ind(outputMatrixSize,transpose(acked.source),queues.status([acked.source]))) = 1;
-                    % TODO: inserire matrice dei ritardi [Issue: https://github.com/afcuttin/jsac/issues/21]
                     output.delays(sub2ind(outputMatrixSize,transpose(acked.source),queues.status([acked.source]))) = output.duration;
 
                     % update the transmission queues
