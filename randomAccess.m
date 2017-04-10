@@ -1,24 +1,42 @@
-function [output] = randomAccess(input)
+function [output] = randomAccess(numberOfSources,queueLength,linkMode)
 % function [in] = randomAccess(out)
 %
 % Simulation of Multiple Random Access
 %
 % Input parameters:
-% * input.sources: number of sources (type: integer)
-% * input.queueLength: number of packets (burst) in the fifo queue for each source. The length must be the same for all sources (type: integer)
-% * input.linkMode: can be one of the following: 'tul', terrestrial uplink, 'sul', satellite UL, 'sdl', satellite downlink, 'tdl', terrestrial DL (type: string)
+% * numberOfSources: number of sources (type: integer)
+% * queueLength: number of packets (burst) in the fifo queue for each source. The length must be the same for all sources (type: integer). Can be a scalar (all the queues have the same length) or a colum vector specifying different lengths
+% * linkMode: can be one of the following: 'tul', terrestrial uplink, 'sul', satellite UL, 'sdl', satellite downlink, 'tdl', terrestrial DL (type: string)
 % * input.sinrThreshold: value of the SINR threshold to be used (type: integer)
 % * input.rafLength: the length of the random access frame (RAF) (type: integer)
 % * input.bitsPerSymbol: depends on the modulation scheme (type: integer)
-% * input.fecRate: Forwar Error Correctin rate; depends on the modulation scheme (type: double)
+% * input.fecRate: Forwar Error Correction rate; depends on the modulation scheme (type: double)
 %
 % Output
 %
 % output.queues: a logical matrix of input.sources rows and input.queueLength columns where each cell is set to 1 if the packet was successfully decoded or 0 if it was not
+% output.delays: a matrix of input.sources rows and input.queueLength columns where each cell is set to the index of the RAF in which the packet was successfully decoded
 % output.duration: the number of RAFs that have been generated to process all the input queues, needed to compute the average load and throughput
 
-queues.status        = input.queueLength * ones(input.sources,1);
-output.matrix        = zeros(input.sources,input.queueLength);
+validateattributes(numberOfSources,{'numeric'},{'integer','positive'},mfilename,'numberOfSources',1);
+validateattributes(queueLength,{'numeric'},{'vector','nonempty','integer','positive'},mfilename,'queueLength',2);
+validatestring(linkMode,{'tul','sul','tdl','sdl'},mfilename,'linkMode',3);
+assert(size(queueLength,2) == 1,'queueLength must be a column vector');
+assert(size(queueLength,1) == numberOfSources,'the length of queueLength must be equal to numberOfSources');
+
+input.sources             = numberOfSources;
+input.queueLength         = queueLength;
+input.linkMode            = linkMode;
+% input.sinrThreshold     =
+input.rafLength           = 80;
+input.burstMaxRepetitions = 4;
+input.bitsPerSymbol       = 3; % 8psk
+input.fecRate             = 3/5;
+
+queues.status        = input.queueLength .* ones(input.sources,1);
+output.queues        = zeros(input.sources,max(input.queueLength));
+output.delays        = zeros(input.sources,max(input.queueLength));
+outputMatrixSize     = size(output.queues)
 % queste sono tutte le variabili ereditate dal vecchio codice, se possibile provvedere al refactoring
 source.number        = input.sources;
 % TODO: define a proper size of the RAF with respect to the number of actual sources [Issue: https://github.com/afcuttin/jsac/issues/4]
@@ -73,7 +91,7 @@ for it = sicPar.minIter:sicPar.maxIter
 
                     assert(all(queues.status >= 0),'The status of a queue cannot be negative');
 
-                    output.duration = output.duration + 1;
+                    output.duration = output.duration + 1; % in multiples of RAF
                     raf.status      = zeros(source.number,raf.length); % memoryless
                     raf.slotStatus  = int8(zeros(1,raf.length));
                     raf.twins       = cell(source.number,raf.length);
@@ -85,6 +103,7 @@ for it = sicPar.minIter:sicPar.maxIter
                     numberOfBursts = 2; % for testing purposes
                     for eachSource1 = 1:source.number
                         % TODO: inserire esperimento aleatorio per la scelta  del numero di pacchetti (come in IRSA) [Issue: https://github.com/afcuttin/jsac/issues/11]
+                        % TODO: inserire la possibilità di fare arrivi di Poisson [Issue: https://github.com/afcuttin/jsac/issues/22]
                         if queues.status(eachSource1) > 0
                             if source.status(1,eachSource1) == 0 % a new burst can be sent
                                 source.status(1,eachSource1)      = 1;
@@ -143,6 +162,7 @@ for it = sicPar.minIter:sicPar.maxIter
                     % pcktTransmissionAttempts = pcktTransmissionAttempts + sum(source.status == 1); % "the normalized MAC load G does not take into account the replicas" Casini et al., 2007, pag.1411; "The performance parameter is throughput (measured in useful packets received per slot) vs. load (measured in useful packets transmitted per slot" Casini et al., 2007, pag.1415
                     % ackdPacketCount = ackdPacketCount + numel(acked.source);
 
+                    % TODO: remove after testing [Issue: https://github.com/afcuttin/jsac/issues/23]
                     % fprintf('Acked sources %f \n',acked.source);
                     % fprintf('Queues status %f \n',queues.status);
                     fprintf('Acked sources\n');
@@ -150,7 +170,11 @@ for it = sicPar.minIter:sicPar.maxIter
                     fprintf('Queues status\n');
                     queues.status
                     % update the confirmed packets' status
-                    output.matrix(sub2ind([input.sources input.queueLength],transpose(acked.source),queues.status([acked.source]))) = 1;
+                    % TODO: se input.queueLength è un vettore 'Dimensions of matrices being concatenated are not consistent.' [Issue: https://github.com/afcuttin/jsac/issues/20]
+                    % output.queues(sub2ind([input.sources max(input.queueLength)],transpose(acked.source),queues.status([acked.source]))) = 1;
+                    output.queues(sub2ind(outputMatrixSize,transpose(acked.source),queues.status([acked.source]))) = 1;
+                    % TODO: inserire matrice dei ritardi [Issue: https://github.com/afcuttin/jsac/issues/21]
+                    output.delays(sub2ind(outputMatrixSize,transpose(acked.source),queues.status([acked.source]))) = output.duration;
 
                     % update the transmission queues
                     queues.status([acked.source]) = queues.status([acked.source]) - 1;
@@ -214,6 +238,10 @@ for it = sicPar.minIter:sicPar.maxIter
                 error('Please select one of the availables link modes (tul, sul, sdl, tdl).');
         end
 
-output.matrix = fliplr(output.matrix); % because packets are updated in reverse order
+% TODO: le code in uscita dei pacchetti nelle matrici sono disallineate [Issue: https://github.com/afcuttin/jsac/issues/24]
+output.queues = fliplr(output.queues); % because packets are updated in reverse order
+output.delays = fliplr(output.delays); % because packets are updated in reverse order
 
 end
+
+output.rafLength = input.rafLength;
