@@ -18,17 +18,22 @@ function [output] = randomAccess(numberOfSources,queueLength,linkMode)
 % output.delays: a matrix of input.sources rows and input.queueLength columns where each cell is set to the index of the RAF in which the packet was successfully decoded
 % output.duration: the number of RAFs that have been generated to process all the input queues, needed to compute the average load and throughput
 
+% TODO: complete the SUL mode first (1) [Issue: https://github.com/afcuttin/jsac/issues/29]
+% TODO: complete the SDL mode second (2) [Issue: https://github.com/afcuttin/jsac/issues/31]
+% TODO: complete the TDL mode third (3) [Issue: https://github.com/afcuttin/jsac/issues/30]
+% TODO: complete the TUL mode fourth (4) [Issue: https://github.com/afcuttin/jsac/issues/28]
+
 validateattributes(numberOfSources,{'numeric'},{'integer','positive'},mfilename,'numberOfSources',1);
 validateattributes(queueLength,{'numeric'},{'vector','nonempty','integer','positive'},mfilename,'queueLength',2);
 validatestring(linkMode,{'tul','sul','tdl','sdl'},mfilename,'linkMode',3);
-assert(size(queueLength,2) == 1,'queueLength must be a column vector');
-assert(size(queueLength,1) == numberOfSources,'the length of queueLength must be equal to numberOfSources');
+assert(iscolumn(queueLength),'Variable queueLength must be a column vector');
+assert((size(queueLength,1) == numberOfSources) || (size(queueLength,1) == 1),'The length of queueLength must be 1 or must be equal to numberOfSources');
 
 input.sources             = numberOfSources;
 input.queueLength         = queueLength;
 input.linkMode            = linkMode;
 % input.sinrThreshold     =
-input.rafLength           = 80;
+input.rafLength           = 20;
 input.burstMaxRepetitions = 4;
 input.bitsPerSymbol       = 3; % 8psk
 input.fecRate             = 3/5;
@@ -56,8 +61,7 @@ sicPar.minIter       = 1;
 %     capturePar.threshold = 2^(input.bitsPerSymbol * input.fecRate) - 1;
 % end
 
-% TODO: delete following line after testing [Issue: https://github.com/afcuttin/jsac/issues/10]
-capturePar.threshold = 14; % the value of the parameter is obtained as follows: thr_val_dB + 11 = capturePar.threshold; thr_val_dB values are -10:1:10
+capturePar.threshold = 14; % the value of the parameter is obtained as follows: thr_val_dB + 11 = capturePar.threshold; thr_val_dB values are -10:1:10 % TEST: delete this line after testing
 
 % the following for cycle should go away
 for it = sicPar.minIter:sicPar.maxIter
@@ -80,11 +84,15 @@ for it = sicPar.minIter:sicPar.maxIter
             case 'tul' % random access method is Coded Slotted Aloha
 
                 % carico il file che contiene le probabilità di cattura
-                % load('Captures_TUL','C_TUL');
-                % capturePar.probability = C_TUL;
+                load('Captures_TUL_3','C_R_TUL_3','R_v','S_v');
+                capturePar.rateThrVec      = R_v;
+                capturePar.probability3seg = C_R_TUL_3;
+                load('Captures_TUL_4','C_R_TUL_4');
+                capturePar.probability4seg = C_R_TUL_4;
+                capturePar.accessMethod    = 'csa';
                 % TODO: update with correct capure probabilites after testing [Issue: https://github.com/afcuttin/jsac/issues/8]
-                load('capt_SUL.mat','C');
-                capturePar.probability = C;
+                % load('capt_SUL.mat','C');
+                % capturePar.probability = C;
 
                 while sum(queues.status) > 0
 
@@ -99,7 +107,7 @@ for it = sicPar.minIter:sicPar.maxIter
                     % create the RAF
                     % TODO: update with correct number of bursts after testing [Issue: https://github.com/afcuttin/jsac/issues/2]
                     numberOfBursts = 3; % CSA method
-                    numberOfBursts = 2; % for testing purposes
+                    % numberOfBursts = 2; % for testing purposes
                     for eachSource1 = 1:source.number
                         % TODO: inserire esperimento aleatorio per la scelta  del numero di pacchetti (come in IRSA) [Issue: https://github.com/afcuttin/jsac/issues/11]
                         % TODO: inserire la possibilità di fare arrivi di Poisson [Issue: https://github.com/afcuttin/jsac/issues/22]
@@ -134,6 +142,8 @@ for it = sicPar.minIter:sicPar.maxIter
                         end
                     end
 
+                    assert(all(sum(raf.status,2) == 3)) % TEST: delete this line after testing
+
                     % acked.slot   = [];
                     acked.source = [];
                     iter         = 0;
@@ -161,17 +171,17 @@ for it = sicPar.minIter:sicPar.maxIter
                     % pcktTransmissionAttempts = pcktTransmissionAttempts + sum(source.status == 1); % "the normalized MAC load G does not take into account the replicas" Casini et al., 2007, pag.1411; "The performance parameter is throughput (measured in useful packets received per slot) vs. load (measured in useful packets transmitted per slot" Casini et al., 2007, pag.1415
                     % ackdPacketCount = ackdPacketCount + numel(acked.source);
 
-                    % TODO: remove after testing [Issue: https://github.com/afcuttin/jsac/issues/23]
-                    % fprintf('Acked sources %f \n',acked.source);
-                    % fprintf('Queues status %f \n',queues.status);
-                    fprintf('Acked sources\n');
-                    acked.source
-                    fprintf('Queues status\n');
-                    queues.status
+                    % fprintf('Acked sources %f \n',acked.source); % TEST: delete this line after testing
+                    % fprintf('Queues status %f \n',queues.status); % TEST: delete this line after testing
+                    fprintf('Acked sources\n'); % TEST: delete this line after testing
+                    acked.source % TEST: delete this line after testing
+                    fprintf('Queues status\n'); % TEST: delete this line after testing
+                    queues.status % TEST: delete this line after testing
                     % update the confirmed packets' status
                     % output.queues(sub2ind([input.sources max(input.queueLength)],transpose(acked.source),queues.status([acked.source]))) = 1;
                     output.queues(sub2ind(outputMatrixSize,transpose(acked.source),queues.status([acked.source]))) = 1;
                     output.delays(sub2ind(outputMatrixSize,transpose(acked.source),queues.status([acked.source]))) = output.duration;
+                    % TODO: registrare il numero di ritrasmissioni necessarie per ogni pacchetto [Issue: https://github.com/afcuttin/jsac/issues/26]
 
                     % update the transmission queues
                     queues.status([acked.source]) = queues.status([acked.source]) - 1;
@@ -188,6 +198,8 @@ for it = sicPar.minIter:sicPar.maxIter
 
                 load('Captures_SUL','C_SUL');
                 capturePar.probability = C_SUL;
+                capture.accessMethod = 'csa'
+
                 % create the RAF
                 numberOfBursts = 2;
                 for eachSource1 = 1:source.number
@@ -226,16 +238,18 @@ for it = sicPar.minIter:sicPar.maxIter
                 if strcmp(input.linkMode,'sdl')
                     load('Captures_SDL','C_SDL');
                     capturePar.probability = C_SDL;
+                    capturePar.sinrThrVec  = S_v;
                 elseif strcmp(input.linkMode,'tdl')
                     load('Captures_TDL','C_TDL');
                     capturePar.probability = C_TDL;
+                    capturePar.sinrThrVec  = S_v;
                 end
 
             otherwise
                 error('Please select one of the availables link modes (tul, sul, sdl, tdl).');
         end
 
-% TODO: le code in uscita dei pacchetti nelle matrici sono disallineate [Issue: https://github.com/afcuttin/jsac/issues/24]
+% FIXME: TODO: le code in uscita dei pacchetti nelle matrici sono disallineate (prova) [Issue: https://github.com/afcuttin/jsac/issues/27]
 output.queues = fliplr(output.queues); % because packets are updated in reverse order
 output.delays = fliplr(output.delays); % because packets are updated in reverse order
 

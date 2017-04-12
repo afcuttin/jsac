@@ -1,11 +1,13 @@
 % for test purposes only
 clearvars;
 
-numberOfSources           = 80;
-queueLength               = transpose(randperm(numberOfSources*2,numberOfSources));
+numberOfSources           = 20;
+queueLength               = 100;
+% queueLength               = transpose(randperm(numberOfSources*2,numberOfSources));
 linkMode                  = 'tul'; %can be one of the following: 'tul', terrestrial uplink, 'sul', satellite UL, 'sdl', satellite downlink, 'tdl', terrestrial DL (type: string)
 
 % * input.sinrThreshold: value of the SINR threshold to be used (type: integer)
+% TODO: every link mode shall be tested [Issue: https://github.com/afcuttin/jsac/issues/32]
 
 output = randomAccess(numberOfSources,queueLength,linkMode);
 
