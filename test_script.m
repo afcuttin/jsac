@@ -4,21 +4,39 @@ clearvars;
 numberOfSources           = 20;
 queueLength               = 100;
 % queueLength               = transpose(randperm(numberOfSources*2,numberOfSources));
-linkMode                  = 'tul'; %can be one of the following: 'tul', terrestrial uplink, 'sul', satellite UL, 'sdl', satellite downlink, 'tdl', terrestrial DL (type: string)
 
-% * input.sinrThreshold: value of the SINR threshold to be used (type: integer)
-% TODO: every link mode shall be tested [Issue: https://github.com/afcuttin/jsac/issues/32]
-
-output = randomAccess(numberOfSources,queueLength,linkMode);
-
-if strcmp(linkMode,'tul')
-	% TODO: il calcolo del throughput deve essere differenziato a seconda che si usi CRDSA (slot) o CSA (slice). Per adesso sono uguali [Issue: https://github.com/afcuttin/jsac/issues/12]
-	outputLoad       = queueLength * numberOfSources ./ (output.rafLength * output.duration);
-	outputThroughput = sum(sum(output.queues,2)) ./ (output.rafLength * output.duration);
-elseif strcmp(linkMode,'tdl') || strcmp(linkMode,'sdl') || strcmp(linkMode,'sul')
-	outputLoad       = queueLength * numberOfSources ./ (output.rafLength * output.duration);
-	outputThroughput = sum(sum(output.queues,2)) ./ (output.rafLength * output.duration);
-end
+activeModes = {'sul'}; % a cell array with any of the following: 'tul', terrestrial uplink, 'sul', satellite UL, 'sdl', satellite downlink, 'tdl', terrestrial DL
 
 fprintf('Results are stored in the "output" variable.\n');
-fprintf('Load %f Throughput %f \n',outputLoad,outputThroughput);
+
+% TODO: every link mode shall be tested [Issue: https://github.com/afcuttin/jsac/issues/33]
+if any(strcmp('tul',activeModes))
+
+	output         = randomAccess(numberOfSources,queueLength,'tul');
+	% TODO: il calcolo del throughput deve essere differenziato a seconda che si usi CRDSA (slot) o CSA (slice). Per adesso sono uguali [Issue: https://github.com/afcuttin/jsac/issues/12]
+	TUL_Load       = queueLength * numberOfSources ./ (output.rafLength * output.duration);
+	TUL_Throughput = sum(sum(output.queues,2)) ./ (output.rafLength * output.duration);
+	fprintf('TUL - Load %f Throughput %f \n',outputLoad,outputThroughput);
+
+elseif any(strcmp('sul',activeModes))
+
+	output         = randomAccess(numberOfSources,queueLength,'sul');
+	SUL_Load       = queueLength * numberOfSources ./ (output.rafLength * output.duration);
+	SUL_Throughput = sum(sum(output.queues,2)) ./ (output.rafLength * output.duration);
+	fprintf('SUL - Load %f Throughput %f \n',outputLoad,outputThroughput);
+
+elseif any(strcmp('tul',activeModes))
+
+	output = randomAccess(numberOfSources,queueLength,'sdl');
+	% SUL_Load
+	% SUL_Throughput
+	fprintf('SDL - Load %f Throughput %f \n',outputLoad,outputThroughput);
+
+elseif any(strcmp('tul',activeModes))
+
+	output = randomAccess(numberOfSources,queueLength,'tdl');
+	% SUL_Load
+	% SUL_Throughput
+	fprintf('TDL - Load %f Throughput %f \n',outputLoad,outputThroughput);
+
+end
