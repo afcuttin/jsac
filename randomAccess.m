@@ -33,7 +33,7 @@ input.sources             = numberOfSources;
 input.queueLength         = queueLength;
 input.linkMode            = linkMode;
 % input.sinrThreshold     =
-input.rafLength           = 20;
+input.rafLength           = 7;
 input.burstMaxRepetitions = 4;
 input.bitsPerSymbol       = 3; % 8psk
 input.fecRate             = 3/5;
@@ -41,7 +41,8 @@ input.fecRate             = 3/5;
 queues.status        = input.queueLength .* ones(input.sources,1);
 output.queues        = zeros(input.sources,max(input.queueLength));
 output.delays        = zeros(input.sources,max(input.queueLength));
-outputMatrixSize     = size(output.queues)
+output.retries       = zeros(input.sources,max(input.queueLength));
+outputMatrixSize     = size(output.queues);
 % queste sono tutte le variabili ereditate dal vecchio codice, se possibile provvedere al refactoring
 source.number        = input.sources;
 % TODO: define a proper size of the RAF with respect to the number of actual sources [Issue: https://github.com/afcuttin/jsac/issues/4]
@@ -144,7 +145,7 @@ for it = sicPar.minIter:sicPar.maxIter
 
                     assert(all(sum(raf.status,2) == 3)) % TEST: delete this line after testing
 
-                    % acked.slot   = [];
+                    acked.slot   = [];
                     acked.source = [];
                     iter         = 0;
                     enterTheLoop = true;
@@ -154,7 +155,7 @@ for it = sicPar.minIter:sicPar.maxIter
                         % decoding
                         [decRaf,decAcked] = decoding(raf,capturePar);
                         % update acked bursts list
-                        % acked.slot   = [acked.slot,decAcked.slot];
+                        acked.slot   = [acked.slot,decAcked.slot];
                         acked.source = [acked.source,decAcked.source];
                         % perform interference cancellation
                         icRaf = ic(decRaf,decAcked);
@@ -194,41 +195,118 @@ for it = sicPar.minIter:sicPar.maxIter
 
             case 'sul' % random access method is CRDSA
 
-                % TODO: completare Satellite Uplink [Issue: https://github.com/afcuttin/jsac/issues/3]
-
+                % carico il file che contiene le probabilità di cattura
+                % load('Captures_SUL','C_SUL','S_v'); % TEST: uncomment after testing
+                % capturePar.sinrThrVec  = S_v; % TEST: uncomment after testing
+                % capturePar.probability = C_SUL; % TEST: uncomment after testing
+                % capturePar.accessMethod    = 'crdsa'; % TEST: uncomment after testing
                 load('Captures_SUL','C_SUL');
                 capturePar.probability = C_SUL;
-                capture.accessMethod = 'csa'
-
-                % create the RAF
                 numberOfBursts = 2;
-                for eachSource1 = 1:source.number
-                    if queues.status(eachSource1) > 0
-                        if source.status(1,eachSource1) == 0 % a new burst can be sent
-                            source.status(1,eachSource1)      = 1;
-                            [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
-                            raf.status(eachSource1,pcktTwins) = 1;
-                            raf.twins(eachSource1,:)          = rafRow;
-                        elseif source.status(1,eachSource1) >= 1 && source.status(1,eachSource1) <= input.burstMaxRepetitions  % backlogged source
-                            source.status(1,eachSource1)      = source.status(1,eachSource1) + 1;
-                            [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
-                            raf.status(eachSource1,pcktTwins) = 1;
-                            raf.twins(eachSource1,:)          = rafRow;
-                        elseif source.status(1,eachSource1) > input.burstMaxRepetitions  % backlogged source, reached maximum number of attempts, discard backlogged burst
-                            % decidere se fare qui lo scarto del pacchetto, o più avanti, quando si fa la verifica di quelli confermati
-                            % marcare a 0 la posizione corrispondente al pacchetto scartato
-                            % decrementare il contatore della coda dei pacchetti in ingresso
-                            % procedere con una nuova trasmissione
-                            source.status(1,eachSource1)      = 1;
-                            [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
-                            raf.status(eachSource1,pcktTwins) = 1;
-                            raf.twins(eachSource1,:)          = rafRow;
+                capturePar.accessMethod = 'crdsa';
+
+                while sum(queues.status) > 0
+
+                    assert(all(queues.status >= 0),'The status of a queue cannot be negative');
+
+                    output.duration = output.duration + 1; % in multiples of RAF
+                    raf.status      = zeros(source.number,raf.length); % memoryless
+                    raf.slotStatus  = int8(zeros(1,raf.length));
+                    raf.twins       = cell(source.number,raf.length);
+
+                    % TODO: completare Satellite Uplink [Issue: https://github.com/afcuttin/jsac/issues/3]
+
+                    % create the RAF
+                    for eachSource1 = 1:source.number
+                        if queues.status(eachSource1) > 0
+                            if source.status(1,eachSource1) == 0 % a new burst can be sent
+                                source.status(1,eachSource1)      = 1;
+                                [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
+                                raf.status(eachSource1,pcktTwins) = 1;
+                                raf.twins(eachSource1,:)          = rafRow;
+                                % TODO: record here the time (raf id) when the burst has been transmitted for the first time (1 of 2) [Issue: https://github.com/afcuttin/jsac/issues/34]
+                            elseif source.status(1,eachSource1) >= 1 && source.status(1,eachSource1) < input.burstMaxRepetitions  % backlogged source
+                                source.status(1,eachSource1)      = source.status(1,eachSource1) + 1;
+                                [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
+                                raf.status(eachSource1,pcktTwins) = 1;
+                                raf.twins(eachSource1,:)          = rafRow;
+                            elseif source.status(1,eachSource1) >= input.burstMaxRepetitions  % backlogged source, reached maximum number of attempts, discard backlogged burst
+                                if queues.status(eachSource1) > 1
+                                    queues.status(eachSource1)        = queues.status(eachSource1) - 1; % permanently drop unconfirmed packet
+                                    % proceed with the transmission of the next packet in the queue
+                                    source.status(1,eachSource1)      = 1;
+                                    [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
+                                    raf.status(eachSource1,pcktTwins) = 1;
+                                    raf.twins(eachSource1,:)          = rafRow;
+                                    % TODO: record here the time (raf id) when the burst has been transmitted for the first time (2 of 2) [Issue: https://github.com/afcuttin/jsac/issues/36]
+                                elseif queues.status(eachSource1) == 1
+                                    % backlogged source, reached maximum number of attempts, discard backlogged burst, which is also the last in the queue
+                                    queues.status(eachSource1)   = queues.status(eachSource1) - 1;
+                                    assert(queues.status(eachSource1) >= 0,'negative queue status');
+                                    source.status(1,eachSource1) = 0;
+                                end
+                            else
+                                error('Unlegit sourse status.');
+                            end
                         end
                     end
-                end
 
-                acked.slot   = [];
-                acked.source = [];
+                    acked.slot   = [];
+                    acked.source = [];
+                    iter         = 0;
+                    enterTheLoop = true;
+
+                    while (sum(raf.slotStatus) > 0 && iter <= maxIter) || enterTheLoop
+                        enterTheLoop = false;
+                        % decoding
+                        [decRaf,decAcked] = decoding(raf,capturePar);
+                        % update acked bursts list
+                        acked.slot   = [acked.slot,decAcked.slot];
+                        acked.source = [acked.source,decAcked.source];
+                        % perform interference cancellation
+                        icRaf = ic(decRaf,decAcked);
+                        % start again
+                        raf = icRaf;
+                        iter = iter + 1;
+                    end
+
+                    % check for duplicates
+                    count = histc(acked.source,unique(acked.source));
+                    duplicatesExist = sum(count > 1) > 0;
+                    assert(~duplicatesExist,'Error in the Successive Interference Cancellation process: one or more sources are acknowledged more than once');
+
+                    % pcktTransmissionAttempts = pcktTransmissionAttempts + sum(source.status == 1); % "the normalized MAC load G does not take into account the replicas" Casini et al., 2007, pag.1411; "The performance parameter is throughput (measured in useful packets received per slot) vs. load (measured in useful packets transmitted per slot" Casini et al., 2007, pag.1415
+                    % ackdPacketCount = ackdPacketCount + numel(acked.source);
+
+                    % fprintf('Acked sources %f \n',acked.source); % TEST: delete this line after testing
+                    % fprintf('Queues status %f \n',queues.status); % TEST: delete this line after testing
+                    fprintf('Acked sources\n'); % TEST: delete this line after testing
+                    acked.source % TEST: delete this line after testing
+                    fprintf('Queues status\n'); % TEST: delete this line after testing
+                    queues.status % TEST: delete this line after testing
+                    % update the confirmed packets' status
+                    % output.queues(sub2ind([input.sources max(input.queueLength)],transpose(acked.source),queues.status([acked.source]))) = 1; % TEST: delete this line after testing
+                    output.queues(sub2ind(outputMatrixSize,transpose(acked.source),queues.status([acked.source]))) = 1;
+                    output.delays(sub2ind(outputMatrixSize,transpose(acked.source),queues.status([acked.source]))) = output.duration;
+                    % TODO: to evaluate delay, the slot when the burst has been acked shall be recorded [Issue: https://github.com/afcuttin/jsac/issues/35]
+                    for ii = 1:numel(acked.source)
+                        output.delaySlot(acked.source(ii),queues.status(acked.source(ii))) = acked.slot(ii);
+                    end
+                    % TODO: registrare il numero di ritrasmissioni necessarie per ogni pacchetto [Issue: https://github.com/afcuttin/jsac/issues/26]
+                    for ii = 1:numel(acked.source)
+                        output.retries(acked.source(ii),queues.status(acked.source(ii))) = source.status(acked.source(ii));
+                    end
+
+                    % update the transmission queues
+                    queues.status([acked.source]) = queues.status([acked.source]) - 1;
+                    source.status % TEST: delete this line after testing
+                    source.status([acked.source]) = 0; % update sources statuses
+                    assert(all(source.status >= 0) && all(source.status <= input.burstMaxRepetitions)) % TEST: delete this line after testing
+                    source.status(source.status < 0) = 0; % idle sources stay idle (see permitted statuses above)
+                    % memoryless process (no retransmission attempts)
+                    % queues.status = queues.status - 1;
+                    % source.status = source.status - 1; % update sources statuses
+                end
 
             case {'sdl','tdl'} % no random access, just capture threshold
 
