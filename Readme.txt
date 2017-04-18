@@ -4,7 +4,7 @@ R_v: vettore delle soglie sul tasso - nel senso di efficienza spetrale (modulazi
 
 Captures TUL
 C_TUL_3(numero di sorgenti nel primo slot,numero di sorgenti nel secondo slot,numero di sorgenti nel terzo slot,indice soglia sul tasso)
-C_TUL_3(numero di sorgenti nel primo slot,numero di sorgenti nel secondo slot,numero di sorgenti nel terzo slot,numero di sorgenti nel quarto slot,indice soglia sul tasso)
+C_TUL_4(numero di sorgenti nel primo slot,numero di sorgenti nel secondo slot,numero di sorgenti nel terzo slot,numero di sorgenti nel quarto slot,indice soglia sul tasso)
 
 Captures SUL
 C_SUL(indice numero di sorgenti,indice soglia sul SINR)
