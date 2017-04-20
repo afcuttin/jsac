@@ -14,14 +14,11 @@ function [output] = randomAccess(numberOfSources,queueLength,linkMode)
 %
 % Output
 %
-% output.queues: a logical matrix of input.sources rows and input.queueLength columns where each cell is set to 1 if the packet was successfully decoded or 0 if it was not
-% output.delays: a matrix of input.sources rows and input.queueLength columns where each cell is set to the index of the RAF in which the packet was successfully decoded
+% output.queues: a logical matrix of input.sources rows and queueLength columns where each cell is set to 1 if the packet was successfully decoded or 0 if it was not
+% output.delays: a matrix of input.sources rows and queueLength columns where each cell is set to the index of the RAF in which the packet was successfully decoded
 % output.duration: the number of RAFs that have been generated to process all the input queues, needed to compute the average load and throughput
 
-% TODO: complete the SUL mode first (1) [Issue: https://github.com/afcuttin/jsac/issues/29]
-% TODO: complete the SDL mode second (2) [Issue: https://github.com/afcuttin/jsac/issues/31]
-% TODO: complete the TDL mode third (3) [Issue: https://github.com/afcuttin/jsac/issues/30]
-% TODO: complete the TUL mode fourth (4) [Issue: https://github.com/afcuttin/jsac/issues/28]
+
 
 validateattributes(numberOfSources,{'numeric'},{'integer','positive'},mfilename,'numberOfSources',1);
 validateattributes(queueLength,{'numeric'},{'vector','nonempty','integer','positive'},mfilename,'queueLength',2);
@@ -30,7 +27,6 @@ assert(iscolumn(queueLength),'Variable queueLength must be a column vector');
 assert((size(queueLength,1) == numberOfSources) || (size(queueLength,1) == 1),'The length of queueLength must be 1 or must be equal to numberOfSources');
 
 input.sources             = numberOfSources;
-input.queueLength         = queueLength;
 input.linkMode            = linkMode;
 % input.sinrThreshold     =
 input.rafLength           = 7;
@@ -38,10 +34,12 @@ input.burstMaxRepetitions = 4;
 input.bitsPerSymbol       = 3; % 8psk
 input.fecRate             = 3/5;
 
-queues.status        = input.queueLength .* ones(input.sources,1);
-output.queues        = zeros(input.sources,max(input.queueLength));
-output.delays        = zeros(input.sources,max(input.queueLength));
-output.retries       = zeros(input.sources,max(input.queueLength));
+queueLength          = queueLength .* ones(input.sources,1); % in any case, queueLength becomes a column vector
+queues.status        = ones(input.sources,1);
+output.queues        = zeros(input.sources,max(queueLength));
+output.delays        = zeros(input.sources,max(queueLength));
+output.retries       = zeros(input.sources,max(queueLength));
+output.firstTx       = zeros(input.sources,max(queueLength));
 outputMatrixSize     = size(output.queues);
 % queste sono tutte le variabili ereditate dal vecchio codice, se possibile provvedere al refactoring
 source.number        = input.sources;
@@ -83,6 +81,7 @@ for it = sicPar.minIter:sicPar.maxIter
 
         switch input.linkMode
             case 'tul' % random access method is Coded Slotted Aloha
+% TODO: complete the TUL mode fourth (4) [Issue: https://github.com/afcuttin/jsac/issues/28]
 
                 % carico il file che contiene le probabilità di cattura
                 load('Captures_TUL_3','C_R_TUL_3','R_v','S_v');
@@ -95,9 +94,9 @@ for it = sicPar.minIter:sicPar.maxIter
                 % load('capt_SUL.mat','C');
                 % capturePar.probability = C;
 
-                while sum(queues.status) > 0
+                while any(queues.status <= queueLength)
 
-                    assert(all(queues.status >= 0),'The status of a queue cannot be negative');
+                    assert(all(queues.status <= queueLength+1),'The number of confirmed packets shall not exceed the lenght of the queue.');
 
                     output.duration = output.duration + 1; % in multiples of RAF
                     raf.status      = zeros(source.number,raf.length); % memoryless
@@ -109,36 +108,39 @@ for it = sicPar.minIter:sicPar.maxIter
                     % TODO: update with correct number of bursts after testing [Issue: https://github.com/afcuttin/jsac/issues/2]
                     numberOfBursts = 3; % CSA method
                     % numberOfBursts = 2; % for testing purposes
+                    % NOTE: prima di partire col ciclo, trovare le sorgenti che hanno ancora pacchetti in coda da smaltire, e ciclare solo su quelle, così si può eliminare il condizionale di 116 (4 righe più in basso)
                     for eachSource1 = 1:source.number
                         % TODO: inserire esperimento aleatorio per la scelta  del numero di pacchetti (come in IRSA) [Issue: https://github.com/afcuttin/jsac/issues/11]
                         % TODO: inserire la possibilità di fare arrivi di Poisson [Issue: https://github.com/afcuttin/jsac/issues/22]
-                        if queues.status(eachSource1) > 0
+                        if queues.status(eachSource1) <= queueLength(eachSource1)
                             if source.status(1,eachSource1) == 0 % a new burst can be sent
                                 source.status(1,eachSource1)      = 1;
                                 [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
                                 raf.status(eachSource1,pcktTwins) = 1;
                                 raf.twins(eachSource1,:)          = rafRow;
+                                output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
                             elseif source.status(1,eachSource1) >= 1 && source.status(1,eachSource1) <= input.burstMaxRepetitions  % backlogged source
                                 source.status(1,eachSource1)      = source.status(1,eachSource1) + 1;
                                 [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
                                 raf.status(eachSource1,pcktTwins) = 1;
                                 raf.twins(eachSource1,:)          = rafRow;
                             elseif source.status(1,eachSource1) > input.burstMaxRepetitions  % backlogged source, reached maximum number of attempts, discard backlogged burst
-                                if queues.status(eachSource1) > 1
-                                    queues.status(eachSource1)        = queues.status(eachSource1) - 1; % permanently drop unconfirmed packet
+                                if queues.status(eachSource1) < queueLength(eachSource1)
+                                    queues.status(eachSource1)        = queues.status(eachSource1) + 1; % permanently drop unconfirmed packet and skip to the next
                                     % proceed with the transmission of the next packet in the queue
                                     source.status(1,eachSource1)      = 1;
                                     [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
                                     raf.status(eachSource1,pcktTwins) = 1;
                                     raf.twins(eachSource1,:)          = rafRow;
-                                elseif queues.status(eachSource1) == 1
-                                    % backlogged source, reached maximum number of attempts, discard backlogged burst, which is also the last in the queue
-                                    queues.status(eachSource1)   = queues.status(eachSource1) - 1;
-                                    assert(queues.status(eachSource1) >= 0,'negative queue status');
+                                    output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
+                                elseif queues.status(eachSource1) == queueLength(eachSource1)
+                                    % backlogged source, reached maximum number of attempts, discard the backlogged burst, which is also the last in the queue
+                                    queues.status(eachSource1)   = queues.status(eachSource1) + 1;
+                                    assert(queues.status(eachSource1) <= queueLength(eachSource1),'Queue status greater than queue lenght');
                                     source.status(1,eachSource1) = 0;
                                 end
                             else
-                                error('Unlegit sourse status.');
+                                error('Unlegit source status.');
                             end
                         end
                     end
@@ -179,13 +181,18 @@ for it = sicPar.minIter:sicPar.maxIter
                     fprintf('Queues status\n'); % TEST: delete this line after testing
                     queues.status % TEST: delete this line after testing
                     % update the confirmed packets' status
-                    % output.queues(sub2ind([input.sources max(input.queueLength)],transpose(acked.source),queues.status([acked.source]))) = 1;
+                    % output.queues(sub2ind([input.sources max(queueLength)],transpose(acked.source),queues.status([acked.source]))) = 1;
                     output.queues(sub2ind(outputMatrixSize,transpose(acked.source),queues.status([acked.source]))) = 1;
                     output.delays(sub2ind(outputMatrixSize,transpose(acked.source),queues.status([acked.source]))) = output.duration;
-                    % TODO: registrare il numero di ritrasmissioni necessarie per ogni pacchetto [Issue: https://github.com/afcuttin/jsac/issues/26]
+                    for ii = 1:numel(acked.source)
+                        output.retries(acked.source(ii),queues.status(acked.source(ii))) = source.status(acked.source(ii));
+                    end
+                    for ii = 1:numel(acked.source)
+                        output.delaySlot(acked.source(ii),queues.status(acked.source(ii))) = acked.slot(ii);
+                    end
 
                     % update the transmission queues
-                    queues.status([acked.source]) = queues.status([acked.source]) - 1;
+                    queues.status([acked.source]) = queues.status([acked.source]) + 1;
                     source.status([acked.source]) = 0; % update sources statuses
                     source.status(source.status < 0) = 0; % idle sources stay idle (see permitted statuses above)
                     % memoryless process (no retransmission attempts)
@@ -205,44 +212,43 @@ for it = sicPar.minIter:sicPar.maxIter
                 numberOfBursts = 2;
                 capturePar.accessMethod = 'crdsa';
 
-                while sum(queues.status) > 0
+                while any(queues.status <= queueLength)
 
-                    assert(all(queues.status >= 0),'The status of a queue cannot be negative');
+                    assert(all(queues.status <= queueLength+1),'The number of confirmed packets shall not exceed the lenght of the queue.');
 
                     output.duration = output.duration + 1; % in multiples of RAF
                     raf.status      = zeros(source.number,raf.length); % memoryless
                     raf.slotStatus  = int8(zeros(1,raf.length));
                     raf.twins       = cell(source.number,raf.length);
 
-                    % TODO: completare Satellite Uplink [Issue: https://github.com/afcuttin/jsac/issues/3]
-
                     % create the RAF
+                    % NOTE: prima di partire col ciclo, trovare le sorgenti che hanno ancora pacchetti in coda da smaltire, e ciclare solo su quelle, così si può eliminare il condizionale di 116 (4 righe più in basso)
                     for eachSource1 = 1:source.number
-                        if queues.status(eachSource1) > 0
+                        if queues.status(eachSource1) <= queueLength(eachSource1)
                             if source.status(1,eachSource1) == 0 % a new burst can be sent
                                 source.status(1,eachSource1)      = 1;
                                 [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
                                 raf.status(eachSource1,pcktTwins) = 1;
                                 raf.twins(eachSource1,:)          = rafRow;
-                                % TODO: record here the time (raf id) when the burst has been transmitted for the first time (1 of 2) [Issue: https://github.com/afcuttin/jsac/issues/34]
+                                output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
                             elseif source.status(1,eachSource1) >= 1 && source.status(1,eachSource1) < input.burstMaxRepetitions  % backlogged source
                                 source.status(1,eachSource1)      = source.status(1,eachSource1) + 1;
                                 [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
                                 raf.status(eachSource1,pcktTwins) = 1;
                                 raf.twins(eachSource1,:)          = rafRow;
-                            elseif source.status(1,eachSource1) >= input.burstMaxRepetitions  % backlogged source, reached maximum number of attempts, discard backlogged burst
-                                if queues.status(eachSource1) > 1
-                                    queues.status(eachSource1)        = queues.status(eachSource1) - 1; % permanently drop unconfirmed packet
+                            elseif source.status(1,eachSource1) >= input.burstMaxRepetitions  % backlogged source, reached maximum retry limit, discard backlogged burst
+                                if queues.status(eachSource1) < queueLength(eachSource1)
+                                    queues.status(eachSource1)        = queues.status(eachSource1) + 1; % permanently drop unconfirmed packet
                                     % proceed with the transmission of the next packet in the queue
                                     source.status(1,eachSource1)      = 1;
                                     [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
                                     raf.status(eachSource1,pcktTwins) = 1;
                                     raf.twins(eachSource1,:)          = rafRow;
-                                    % TODO: record here the time (raf id) when the burst has been transmitted for the first time (2 of 2) [Issue: https://github.com/afcuttin/jsac/issues/36]
-                                elseif queues.status(eachSource1) == 1
+                                    output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
+                                elseif queues.status(eachSource1) == queueLength(eachSource1)
                                     % backlogged source, reached maximum number of attempts, discard backlogged burst, which is also the last in the queue
-                                    queues.status(eachSource1)   = queues.status(eachSource1) - 1;
-                                    assert(queues.status(eachSource1) >= 0,'negative queue status');
+                                    queues.status(eachSource1)   = queues.status(eachSource1) + 1;
+                                    assert(queues.status(eachSource1) <= queueLength(eachSource1) + 1,'negative queue status'); % FIXME: update error message (9)
                                     source.status(1,eachSource1) = 0;
                                 end
                             else
@@ -285,30 +291,31 @@ for it = sicPar.minIter:sicPar.maxIter
                     fprintf('Queues status\n'); % TEST: delete this line after testing
                     queues.status % TEST: delete this line after testing
                     % update the confirmed packets' status
-                    % output.queues(sub2ind([input.sources max(input.queueLength)],transpose(acked.source),queues.status([acked.source]))) = 1; % TEST: delete this line after testing
+                    % output.queues(sub2ind([input.sources max(queueLength)],transpose(acked.source),queues.status([acked.source]))) = 1; % TEST: delete this line after testing
                     output.queues(sub2ind(outputMatrixSize,transpose(acked.source),queues.status([acked.source]))) = 1;
                     output.delays(sub2ind(outputMatrixSize,transpose(acked.source),queues.status([acked.source]))) = output.duration;
-                    % TODO: to evaluate delay, the slot when the burst has been acked shall be recorded [Issue: https://github.com/afcuttin/jsac/issues/35]
-                    for ii = 1:numel(acked.source)
-                        output.delaySlot(acked.source(ii),queues.status(acked.source(ii))) = acked.slot(ii);
-                    end
-                    % TODO: registrare il numero di ritrasmissioni necessarie per ogni pacchetto [Issue: https://github.com/afcuttin/jsac/issues/26]
                     for ii = 1:numel(acked.source)
                         output.retries(acked.source(ii),queues.status(acked.source(ii))) = source.status(acked.source(ii));
                     end
+                    for ii = 1:numel(acked.source)
+                        output.delaySlot(acked.source(ii),queues.status(acked.source(ii))) = acked.slot(ii);
+                    end
 
                     % update the transmission queues
-                    queues.status([acked.source]) = queues.status([acked.source]) - 1;
+                    queues.status([acked.source]) = queues.status([acked.source]) + 1;
                     source.status % TEST: delete this line after testing
                     source.status([acked.source]) = 0; % update sources statuses
                     assert(all(source.status >= 0) && all(source.status <= input.burstMaxRepetitions)) % TEST: delete this line after testing
                     source.status(source.status < 0) = 0; % idle sources stay idle (see permitted statuses above)
                     % memoryless process (no retransmission attempts)
-                    % queues.status = queues.status - 1;
+                    % queues.status = queues.status + 1;
                     % source.status = source.status - 1; % update sources statuses
                 end
 
             case {'sdl','tdl'} % no random access, just capture threshold
+
+% TODO: complete the SDL mode second (2) [Issue: https://github.com/afcuttin/jsac/issues/31]
+% TODO: complete the TDL mode third (3) [Issue: https://github.com/afcuttin/jsac/issues/30]
 
                 % TODO: completare Satellite Downlink [Issue: https://github.com/afcuttin/jsac/issues/6]
                 % TODO: completare Terrestrial Downlink [Issue: https://github.com/afcuttin/jsac/issues/5]
@@ -326,11 +333,6 @@ for it = sicPar.minIter:sicPar.maxIter
             otherwise
                 error('Please select one of the availables link modes (tul, sul, sdl, tdl).');
         end
-
-% FIXME: TODO: le code in uscita dei pacchetti nelle matrici sono disallineate (prova) [Issue: https://github.com/afcuttin/jsac/issues/27]
-output.queues = fliplr(output.queues); % because packets are updated in reverse order
-output.delays = fliplr(output.delays); % because packets are updated in reverse order
-
 end
 
 output.rafLength = input.rafLength;
