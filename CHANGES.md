@@ -1,3 +1,7 @@
+## Version 0.6.0:
+ - created a function to validate the outputs; test script has been modified accordingly
+ - fixed problems with the order of the output queues added number of packet retransmissions as output added slot ID of acknowledgmentent as output added RAF ID of the packet's first transmission as output
+
 ## Version 0.5.0:
  - minor adjustments
  - improved the script to test the four different link modes
