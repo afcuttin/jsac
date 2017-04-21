@@ -28,7 +28,7 @@ assert((size(queueLength,1) == numberOfSources) || (size(queueLength,1) == 1),'T
 
 input.sources             = numberOfSources;
 input.linkMode            = linkMode;
-% input.sinrThreshold     =
+input.sinrThreshold       = 4 % value in dB
 input.rafLength           = 7;
 input.burstMaxRepetitions = 4;
 input.bitsPerSymbol       = 3; % 8psk
@@ -59,8 +59,6 @@ sicPar.minIter       = 1;
 % elseif strcmp(input.linkMode,'tdl') || strcmp(input.linkMode,'sdl') || strcmp(input.linkMode,'sul')
 %     capturePar.threshold = 2^(input.bitsPerSymbol * input.fecRate) - 1;
 % end
-
-capturePar.threshold = 14; % the value of the parameter is obtained as follows: thr_val_dB + 11 = capturePar.threshold; thr_val_dB values are -10:1:10 % TEST: delete this line after testing
 
 % the following for cycle should go away
 for it = sicPar.minIter:sicPar.maxIter
@@ -203,14 +201,11 @@ for it = sicPar.minIter:sicPar.maxIter
             case 'sul' % random access method is CRDSA
 
                 % carico il file che contiene le probabilità di cattura
-                % load('Captures_SUL','C_SUL','S_v'); % TEST: uncomment after testing
-                % capturePar.sinrThrVec  = S_v; % TEST: uncomment after testing
-                % capturePar.probability = C_SUL; % TEST: uncomment after testing
-                % capturePar.accessMethod    = 'crdsa'; % TEST: uncomment after testing
-                load('Captures_SUL','C_SUL');
-                capturePar.probability = C_SUL;
-                numberOfBursts = 2;
-                capturePar.accessMethod = 'crdsa';
+                load('Captures_SUL','C_SUL','S_v');
+                capturePar.probability    = C_SUL;
+                [~,capturePar.sinrThrInd] = min(abs(S_v - input.sinrThreshold));
+                capturePar.accessMethod   = 'crdsa';
+                numberOfBursts            = 2;
 
                 while any(queues.status <= queueLength)
 
@@ -316,20 +311,106 @@ for it = sicPar.minIter:sicPar.maxIter
 
 % TODO: complete the SDL mode second (2) [Issue: https://github.com/afcuttin/jsac/issues/31]
 % TODO: complete the TDL mode third (3) [Issue: https://github.com/afcuttin/jsac/issues/30]
-
                 % TODO: completare Satellite Downlink [Issue: https://github.com/afcuttin/jsac/issues/6]
                 % TODO: completare Terrestrial Downlink [Issue: https://github.com/afcuttin/jsac/issues/5]
-
                 if strcmp(input.linkMode,'sdl')
-                    load('Captures_SDL','C_SDL');
+                    load('Captures_SDL');
                     capturePar.probability = C_SDL;
                     capturePar.sinrThrVec  = S_v;
                 elseif strcmp(input.linkMode,'tdl')
-                    load('Captures_TDL','C_TDL');
+                    load('Captures_TDL');
                     capturePar.probability = C_TDL;
                     capturePar.sinrThrVec  = S_v;
                 end
 
+                [~,sinrThrInd] = min(abs(capturePar.sinrThrVec - input.sinrThreshold));
+
+                while any(queues.status <= queueLength)
+
+                    assert(all(queues.status <= queueLength+1),'The number of confirmed packets shall not exceed the lenght of the queue.');
+
+                    output.duration = output.duration + 1; % in multiples of RAF
+
+                    activeSources = find(queues.status <= queueLength)
+
+                    % find idle, backlogged and unsuccessful sources
+                    idleSources         = find(source.status(activeSources) == 0);
+                    backloggedSources   = find(ismember(source.status(activeSources),[1:1:input.burstMaxRepetitions]));
+                    unsuccessfulSources = find(source.status(activeSources) == input.burstMaxRepetitions + 1);
+                    assert(any(source.status > input.burstMaxRepetitions + 1),'source status is one unit too big');
+
+                    % update the status of idle and unsuccessful sources
+                    source.status(idleSources)         = 1;
+                    queues.status(idleSources)         = queues.status(idleSources) + 1;
+                    source.status(unsuccessfulSources) = 1; % unsuccessful sources drop the current packet and move to the next one
+                    queues.status(unsuccessfulSources) = queues.status(unsuccessfulSources) + 1;
+
+                    % update the firstTx matrix
+                    output.firstTx(sub2ind(outputMatrixSize,transpose(idleSources),queues.status(idleSources)))                 = output.duration;
+                    output.firstTx(sub2ind(outputMatrixSize,transpose(unsuccessfulSources),queues.status(unsuccessfulSources))) = output.duration;
+
+                    % run the random experiment to determine successful packet reception (acknowledgment)
+                    randomExperiments = rand(input.sources,1);
+                    successfulTransmission = randomExperiments <= capturePar.probability(sinrThrInd);
+                    ackedSources = find(successfulTransmission(activeSources) == 1);
+                    backlSources = find(~successfulTransmission(activeSources) == 1);
+
+                    % update output matrices and transmission queues for acked sources
+                    output.queues(sub2ind(outputMatrixSize,ackedSources,queues.status(ackedSources))) = 1;
+                    output.delays(sub2ind(outputMatrixSize,ackedSources,queues.status(ackedSources))) = output.duration;
+                    for ii = 1:numel(ackedSources)
+                        output.retries(ackedSources(ii),queues.status(ackedSources(ii))) = source.status(ackedSources(ii));
+                    end
+
+                    queues.status(ackedSources) = queues.status(ackedSources) + 1;
+                    source.status % TEST: delete this line after testing
+                    source.status(ackedSources) = 0; % update sources statuses
+                    source.status(backlSources) = source.status(backlSources) + 1; % update sources statuses
+
+                    assert(all(source.status >= 0) && all(source.status <= input.burstMaxRepetitions)) % TEST: delete this line after testing
+                    % source.status(source.status < 0) = 0; % idle sources stay idle (see permitted statuses above)
+                    % memoryless process (no retransmission attempts)
+                    % queues.status = queues.status + 1;
+                    % source.status = source.status - 1; % update sources statuses
+
+
+
+                    %     % NOTE: prima di partire col ciclo, trovare le sorgenti che hanno ancora pacchetti in coda da smaltire, e ciclare solo su quelle, così si può eliminare il condizionale di 116 (4 righe più in basso)
+                    %     for eachSource1 = 1:source.number
+                    %         if queues.status(eachSource1) <= queueLength(eachSource1)
+                    %             if source.status(1,eachSource1) == 0 % a new burst can be sent
+                    %                 source.status(1,eachSource1)      = 1;
+                    %                 raf.status(eachSource1,pcktTwins) = 1;
+                    %                 raf.twins(eachSource1,:)          = rafRow;
+                    %                 output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
+                    %             elseif source.status(1,eachSource1) >= 1 && source.status(1,eachSource1) < input.burstMaxRepetitions  % backlogged source
+                    %                 source.status(1,eachSource1)      = source.status(1,eachSource1) + 1;
+                    %                 raf.status(eachSource1,pcktTwins) = 1;
+                    %                 raf.twins(eachSource1,:)          = rafRow;
+                    %             elseif source.status(1,eachSource1) >= input.burstMaxRepetitions  % backlogged source, reached maximum retry limit, discard backlogged burst
+                    %                 if queues.status(eachSource1) < queueLength(eachSource1)
+                    %                     queues.status(eachSource1)        = queues.status(eachSource1) + 1; % permanently drop unconfirmed packet
+                    %                     % proceed with the transmission of the next packet in the queue
+                    %                     source.status(1,eachSource1)      = 1;
+                    %                     raf.status(eachSource1,pcktTwins) = 1;
+                    %                     raf.twins(eachSource1,:)          = rafRow;
+                    %                     output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
+                    %                 elseif queues.status(eachSource1) == queueLength(eachSource1)
+                    %                     % backlogged source, reached maximum number of attempts, discard backlogged burst, which is also the last in the queue
+                    %                     queues.status(eachSource1)   = queues.status(eachSource1) + 1;
+                    %                     assert(queues.status(eachSource1) <= queueLength(eachSource1) + 1,'negative queue status'); % FIXME: update error message (9)
+                    %                     source.status(1,eachSource1) = 0;
+                    %                 end
+                    %             else
+                    %                 error('Unlegit sourse status.');
+                    %             end
+                    %         end
+                    %     end
+
+                    %     captureExperiment = rand(1);
+                    % if captureExperiment <= capture.probability(numCollided,capture.threshold)
+                    %     elseif captureExperiment > capture.probability(numCollided,capture.threshold)
+                end
             otherwise
                 error('Please select one of the availables link modes (tul, sul, sdl, tdl).');
         end

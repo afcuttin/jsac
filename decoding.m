@@ -30,7 +30,7 @@ switch capture.accessMethod
                 % captureRatiodB = 10 * log10(raf.receivedPower(captured,si) / sum(raf.receivedPower([1:end ~= captured],si)));
                 % if captureRatiodB >= capture.threshold && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source)
                 captureExperiment = rand(1);
-                if captureExperiment <= capture.probability(numCollided,capture.threshold) && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source)
+                if captureExperiment <= capture.probability(numCollided,capture.sinrThrInd) && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source)
                     % update the list of acked bursts
                     ackedBursts.slot   = [ackedBursts.slot,si];
                     ackedBursts.source = [ackedBursts.source,captured];
@@ -39,7 +39,7 @@ switch capture.accessMethod
                     % raf.receivedPower(captured,si) = capture.sicResidual * raf.receivedPower(captured,si);
                     % sir has changed, update the slot status
                     raf.slotStatus(si) = 2;
-                elseif captureExperiment > capture.probability(numCollided,capture.threshold) || raf.status(captured,si) ~= 1 || ismember(captured,ackedBursts.source)
+                elseif captureExperiment > capture.probability(numCollided,capture.sinrThrInd) || raf.status(captured,si) ~= 1 || ismember(captured,ackedBursts.source)
                     % niente da fare
                     raf.slotStatus(si) = 0;
                 else
