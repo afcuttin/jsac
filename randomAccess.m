@@ -310,47 +310,44 @@ sicPar.minIter       = 1;
                     capturePar.probability = C_TDL;
                     capturePar.sinrThrVec  = S_v;
                 end
-
                 [~,sinrThrInd] = min(abs(capturePar.sinrThrVec - input.sinrThreshold));
 
                 while any(queues.status <= queueLength)
 
                     assert(all(queues.status <= queueLength+1),'The number of confirmed packets shall not exceed the lenght of the queue.');
-
                     output.duration = output.duration + 1; % in multiples of RAF
 
-                    inactiveSources = find(queues.status > queueLength);
-
                     % find idle, backlogged and unsuccessful sources
+                    inactiveSources     = find(queues.status > queueLength);
                     idleSources         = find(source.status == 0);
-                    idleSources = setdiff(idleSources,inactiveSources);
+                    idleSources         = setdiff(idleSources,inactiveSources);
                     backloggedSources   = find(ismember(source.status,[1:1:input.burstMaxRepetitions]));
-                    backloggedSources = setdiff(backloggedSources,inactiveSources);
+                    backloggedSources   = setdiff(backloggedSources,inactiveSources);
                     unsuccessfulSources = find(source.status == input.burstMaxRepetitions + 1);
-                    atEndOfQueue = find(queues.status == queueLength);
-                    atEndOfQueue = intersect(unsuccessfulSources,atEndOfQueue);
+                    atEndOfQueue        = find(queues.status == queueLength);
+                    atEndOfQueue        = intersect(unsuccessfulSources,atEndOfQueue);
                     unsuccessfulSources = setdiff(unsuccessfulSources,[inactiveSources ; atEndOfQueue]);
                     assert(all(source.status <= input.burstMaxRepetitions + 1),'A source status is one unit too big');
 
-                    % TODO: inserire la possibilità di fare arrivi di Poisson (SDL e TDL) (5) [Issue: https://github.com/afcuttin/jsac/issues/38]
+                    % TODO: inserire la possibilità di fare arrivi di Poisson (SDL e TDL) (5) [Issue: https://github.com/afcuttin/jsac/issues/39]
                     % update the status of idle and unsuccessful sources
                     source.status(idleSources)         = 1;
                     source.status(unsuccessfulSources) = 1; % unsuccessful sources drop the current packet and move to the next one
-                    source.status(atEndOfQueue) = 0; % unsuccessful sources at the end of the queue drop the current packet and stay permanently idle
+                    source.status(atEndOfQueue)        = 0; % unsuccessful sources at the end of the queue drop the current packet and stay permanently idle
                     queues.status(unsuccessfulSources) = queues.status(unsuccessfulSources) + 1;
-                    queues.status(atEndOfQueue) = queues.status(atEndOfQueue) + 1;
+                    queues.status(atEndOfQueue)        = queues.status(atEndOfQueue) + 1;
 
                     % update the firstTx matrix
                     output.firstTx(sub2ind(outputMatrixSize,transpose(idleSources),queues.status(idleSources)))                 = output.duration;
                     output.firstTx(sub2ind(outputMatrixSize,transpose(unsuccessfulSources),queues.status(unsuccessfulSources))) = output.duration;
 
                     % run the random experiment to determine successful packet reception (acknowledgment)
-                    randomExperiments = rand(input.sources,1);
+                    randomExperiments      = rand(input.sources,1);
                     successfulTransmission = randomExperiments <= capturePar.probability(sinrThrInd);
-                    ackedSources = find(successfulTransmission == 1);
-                    ackedSources = setdiff(ackedSources,[inactiveSources ; atEndOfQueue]); % NOTE: it is probably better to setdiff between ackedSources and idleSources
-                    backlSources = find(~successfulTransmission == 1);
-                    backlSources = setdiff(backlSources,[inactiveSources ; atEndOfQueue]); % NOTE: it is probably better to setdiff between ackedSources and idleSources
+                    ackedSources           = find(successfulTransmission == 1);
+                    ackedSources           = setdiff(ackedSources,[inactiveSources ; atEndOfQueue]); % NOTE: it is probably better to setdiff between ackedSources and idleSources
+                    backlSources           = find(~successfulTransmission == 1);
+                    backlSources           = setdiff(backlSources,[inactiveSources ; atEndOfQueue]); % NOTE: it is probably better to setdiff between ackedSources and idleSources
 
                     % update output matrices and transmission queues for acked sources
                     if ~isempty(ackedSources)
@@ -364,12 +361,6 @@ sicPar.minIter       = 1;
                     queues.status(ackedSources) = queues.status(ackedSources) + 1;
                     source.status(ackedSources) = 0; % update sources statuses
                     source.status(backlSources) = source.status(backlSources) + 1; % update sources statuses
-
-                    assert(all(source.status >= 0) && all(source.status <= input.burstMaxRepetitions+1)) % TEST: delete this line after testing
-                    % source.status(source.status < 0) = 0; % idle sources stay idle (see permitted statuses above)
-                    % memoryless process (no retransmission attempts)
-                    % queues.status = queues.status + 1;
-                    % source.status = source.status - 1; % update sources statuses
                 end
                 output.rafLength = 1;
             otherwise
