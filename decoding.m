@@ -1,17 +1,15 @@
 function [outRandomAccessFrame,ackedBursts] = decoding(raf,capture)
-% function [outputRandomAccessFrame,ackedPcktsCol,ackedPcktsRow] = capture(inputRandomAccessFrame,,capture)
-% TODO: update decoding function help [Issue: https://github.com/afcuttin/jsac/issues/14]
+% function [outRandomAccessFrame,ackedBursts] = capture(raf,capture)
 %
 % perform Successive Interference Cancellation (SIC) on a given Random Access Frame for Contention Resolution Diversity Slotted Aloha
 %
 % +++ Input parameters
 % 		- raf: the structure of matrices containing slots and packets informations
-% 		- maxIter: the maximum number of times the Successive Interference Cancelation can be performed
+% 		- capture: the structure containing the parameters of the capture
 %
 % +++ Output parameters
 % 		- outRandomAccessFrame: the structure of matrices containing slots and packets informations, after SIC
-% 		- ackedPcktsCol: an array containing the column indices of acknowledged packets after SIC
-% 		- ackedPcktsRow: an array containing the row indices of acknowledged packets after SIC
+% 		- ackedBursts: the structure containing the column (source) and row (slot) indices of acknowledged packets after SIC
 
 ackedBursts.slot   = [];
 ackedBursts.source = [];
