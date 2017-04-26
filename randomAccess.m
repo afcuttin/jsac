@@ -248,7 +248,7 @@ sicPar.minIter       = 1;
                     iter         = 0;
                     enterTheLoop = true;
 
-                    while (sum(raf.slotStatus) > 0 && iter <= maxIter) || enterTheLoop
+                    while (sum(raf.slotStatus) > 0 && iter <= sicPar.maxIter) || enterTheLoop
                         enterTheLoop = false;
                         % decoding
                         [decRaf,decAcked] = decoding(raf,capturePar);
