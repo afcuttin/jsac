@@ -31,9 +31,8 @@ input.linkMode            = linkMode;
 input.sinrThreshold       = 4; % value in dB
 input.rafLength           = 7;
 input.burstMaxRepetitions = 4;
-input.burstMaxRepetitions = 3;  % TEST: delete this line after testing
-input.bitsPerSymbol       = 3; % 8psk
-input.fecRate             = 3/5;
+input.bitsPerSymbol       = 3; % 8psk % NOTE: this parameter is no longer used
+input.fecRate             = 3/5; % NOTE: this parameter is no longer used
 
 queueLength          = queueLength .* ones(input.sources,1); % in any case, queueLength becomes a column vector
 queues.status        = ones(input.sources,1);
@@ -61,17 +60,12 @@ sicPar.minIter       = 1;
 %     capturePar.threshold = 2^(input.bitsPerSymbol * input.fecRate) - 1;
 % end
 
-    % ackdPacketCount          = 0;
-    % pcktTransmissionAttempts = 0;
-    % pcktCollisionCount       = 0;
-    source.status            = zeros(1,source.number);
+    source.status = zeros(1,source.number);
     % legit source statuses are always non-negative integers and equal to:
     % 0: source has no packet ready to be transmitted (is idle)
     % 1: source has a packet ready to be transmitted, either because new data must be sent or a previously collided packet has waited the backoff time
     % integer greater than 1: source is backlogged due to previous packets collision, the integer value corresponds to the number of attempts made to get the latest burst acknowledged
-    % source.backoff           = zeros(1,source.number); % FIXME: probably useless
-    % pcktGenerationTimestamp  = zeros(1,source.number);
-    output.duration          = 0;
+    output.duration = 0;
 
         switch input.linkMode
             case 'tul' % random access method is Coded Slotted Aloha
@@ -104,8 +98,8 @@ sicPar.minIter       = 1;
                     % numberOfBursts = 2; % for testing purposes
                     % NOTE: prima di partire col ciclo, trovare le sorgenti che hanno ancora pacchetti in coda da smaltire, e ciclare solo su quelle, così si può eliminare il condizionale di 116 (4 righe più in basso)
                     for eachSource1 = 1:source.number
-                        % TODO: inserire esperimento aleatorio per la scelta  del numero di pacchetti (come in IRSA) [Issue: https://github.com/afcuttin/jsac/issues/11]
-                        % TODO: inserire la possibilità di fare arrivi di Poisson [Issue: https://github.com/afcuttin/jsac/issues/22]
+                        % TODO: inserire esperimento aleatorio per la scelta  del numero di pacchetti (come in IRSA) [Issue: https://github.com/afcuttin/jsac/issues/11] (3)
+                        % TODO: inserire la possibilità di fare arrivi di Poisson [Issue: https://github.com/afcuttin/jsac/issues/22] (5)
                         if queues.status(eachSource1) <= queueLength(eachSource1)
                             if source.status(1,eachSource1) == 0 % a new burst can be sent
                                 source.status(1,eachSource1)      = 1;
@@ -307,10 +301,6 @@ sicPar.minIter       = 1;
 
             case {'sdl','tdl'} % no random access, just capture threshold
 
-% TODO: complete the SDL mode second (2) [Issue: https://github.com/afcuttin/jsac/issues/31]
-% TODO: complete the TDL mode third (3) [Issue: https://github.com/afcuttin/jsac/issues/30]
-                % TODO: completare Satellite Downlink [Issue: https://github.com/afcuttin/jsac/issues/6]
-                % TODO: completare Terrestrial Downlink [Issue: https://github.com/afcuttin/jsac/issues/5]
                 if strcmp(input.linkMode,'sdl')
                     load('Captures_SDL');
                     capturePar.probability = C_SDL;
@@ -328,88 +318,52 @@ sicPar.minIter       = 1;
                     assert(all(queues.status <= queueLength+1),'The number of confirmed packets shall not exceed the lenght of the queue.');
 
                     output.duration = output.duration + 1; % in multiples of RAF
-                    output.duration % TEST: delete this line
 
                     inactiveSources = find(queues.status > queueLength);
-                    inactiveSources % TEST: delete this line
 
                     % find idle, backlogged and unsuccessful sources
                     idleSources         = find(source.status == 0);
-                    idleSources % TEST: delete this line
                     idleSources = setdiff(idleSources,inactiveSources);
-                    idleSources % TEST: delete this line
                     backloggedSources   = find(ismember(source.status,[1:1:input.burstMaxRepetitions]));
-                    backloggedSources % TEST: delete this line
                     backloggedSources = setdiff(backloggedSources,inactiveSources);
-                    backloggedSources % TEST: delete this line
                     unsuccessfulSources = find(source.status == input.burstMaxRepetitions + 1);
-                    unsuccessfulSources % TEST: delete this line
                     atEndOfQueue = find(queues.status == queueLength);
-                    atEndOfQueue % TEST: delete this line
                     atEndOfQueue = intersect(unsuccessfulSources,atEndOfQueue);
-                    atEndOfQueue % TEST: delete this line
-                    unsuccessfulSources % TEST: delete this line
                     unsuccessfulSources = setdiff(unsuccessfulSources,[inactiveSources ; atEndOfQueue]);
-                    unsuccessfulSources % TEST: delete this line
                     assert(all(source.status <= input.burstMaxRepetitions + 1),'A source status is one unit too big');
 
+                    % TODO: inserire la possibilità di fare arrivi di Poisson (SDL e TDL) (5) [Issue: https://github.com/afcuttin/jsac/issues/38]
                     % update the status of idle and unsuccessful sources
-                    [source.status] % TEST: delete this line
                     source.status(idleSources)         = 1;
-                    [source.status] % TEST: delete this line
                     source.status(unsuccessfulSources) = 1; % unsuccessful sources drop the current packet and move to the next one
                     source.status(atEndOfQueue) = 0; % unsuccessful sources at the end of the queue drop the current packet and stay permanently idle
-                    [source.status] % TEST: delete this line
-                    [queues.status] % TEST: delete this line
                     queues.status(unsuccessfulSources) = queues.status(unsuccessfulSources) + 1;
                     queues.status(atEndOfQueue) = queues.status(atEndOfQueue) + 1;
-                    [queues.status] % TEST: delete this line
 
                     % update the firstTx matrix
-                    % [output.firstTx(:,[1:1:max(queueLength)])] % TEST: delete this line
                     output.firstTx(sub2ind(outputMatrixSize,transpose(idleSources),queues.status(idleSources)))                 = output.duration;
-                    % [output.firstTx(:,[1:1:max(queueLength)])] % TEST: delete this line
                     output.firstTx(sub2ind(outputMatrixSize,transpose(unsuccessfulSources),queues.status(unsuccessfulSources))) = output.duration;
-                    % [output.firstTx(:,[1:1:max(queueLength)])] % TEST: delete this line
 
                     % run the random experiment to determine successful packet reception (acknowledgment)
                     randomExperiments = rand(input.sources,1);
-                    randomExperiments % TEST: delete this line
-                    capturePar.probability(sinrThrInd) % TEST: delete this line after testing
                     successfulTransmission = randomExperiments <= capturePar.probability(sinrThrInd);
-                    successfulTransmission % TEST: delete this line
                     ackedSources = find(successfulTransmission == 1);
-                    ackedSources % TEST: delete this line
                     ackedSources = setdiff(ackedSources,[inactiveSources ; atEndOfQueue]); % NOTE: it is probably better to setdiff between ackedSources and idleSources
-                    ackedSources % TEST: delete this line
                     backlSources = find(~successfulTransmission == 1);
-                    backlSources % TEST: delete this line
                     backlSources = setdiff(backlSources,[inactiveSources ; atEndOfQueue]); % NOTE: it is probably better to setdiff between ackedSources and idleSources
-                    backlSources % TEST: delete this line
 
                     % update output matrices and transmission queues for acked sources
-                    % [output.queues(:,[1:1:max(queueLength)])] % TEST: delete this line
                     if ~isempty(ackedSources)
                         output.queues(sub2ind(outputMatrixSize,ackedSources,queues.status(ackedSources))) = 1;
-                        % [output.queues(:,[1:1:max(queueLength)])] % TEST: delete this line
-                        % [output.delays(:,[1:1:max(queueLength)])] % TEST: delete this line
                         output.delays(sub2ind(outputMatrixSize,ackedSources,queues.status(ackedSources))) = output.duration;
-                        % [output.delays(:,[1:1:max(queueLength)])] % TEST: delete this line
-                        % [output.retries(:,[1:1:max(queueLength)])] % TEST: delete this line
                         for ii = 1:numel(ackedSources)
                             output.retries(ackedSources(ii),queues.status(ackedSources(ii))) = source.status(ackedSources(ii));
                         end
-                        % [output.retries(:,[1:1:max(queueLength)])] % TEST: delete this line
                     end
 
-                    [queues.status] % TEST: delete this line
                     queues.status(ackedSources) = queues.status(ackedSources) + 1;
-                    [queues.status] % TEST: delete this line
-                    [source.status] % TEST: delete this line after testing
                     source.status(ackedSources) = 0; % update sources statuses
-                    [source.status] % TEST: delete this line after testing
                     source.status(backlSources) = source.status(backlSources) + 1; % update sources statuses
-                    [source.status] % TEST: delete this line after testing
 
                     assert(all(source.status >= 0) && all(source.status <= input.burstMaxRepetitions+1)) % TEST: delete this line after testing
                     % source.status(source.status < 0) = 0; % idle sources stay idle (see permitted statuses above)
