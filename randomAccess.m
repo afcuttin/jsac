@@ -98,7 +98,12 @@ sicPar.minIter       = 1;
                     % numberOfBursts = 2; % for testing purposes
                     % NOTE: prima di partire col ciclo, trovare le sorgenti che hanno ancora pacchetti in coda da smaltire, e ciclare solo su quelle, così si può eliminare il condizionale di 116 (4 righe più in basso)
                     for eachSource1 = 1:source.number
-                        % TODO: inserire esperimento aleatorio per la scelta  del numero di pacchetti (come in IRSA) [Issue: https://github.com/afcuttin/jsac/issues/11] (3)
+                        pcktRepetitionExp = rand(1);
+                        if pcktRepetitionExp <= 1/3
+                            numberOfBursts = 4;
+                        elseif pcktRepetitionExp <= (1/3 + 2/3)
+                            numberOfBursts = 3;
+                        end
                         % TODO: inserire la possibilità di fare arrivi di Poisson [Issue: https://github.com/afcuttin/jsac/issues/22] (5)
                         if queues.status(eachSource1) <= queueLength(eachSource1)
                             if source.status(1,eachSource1) == 0 % a new burst can be sent
@@ -234,7 +239,6 @@ sicPar.minIter       = 1;
                                 elseif queues.status(eachSource1) == queueLength(eachSource1)
                                     % backlogged source, reached maximum number of attempts, discard backlogged burst, which is also the last in the queue
                                     queues.status(eachSource1)   = queues.status(eachSource1) + 1;
-                                    assert(queues.status(eachSource1) <= queueLength(eachSource1) + 1,'negative queue status'); % FIXME: update error message (9)
                                     source.status(1,eachSource1) = 0;
                                 end
                             else
@@ -270,14 +274,11 @@ sicPar.minIter       = 1;
                     % pcktTransmissionAttempts = pcktTransmissionAttempts + sum(source.status == 1); % "the normalized MAC load G does not take into account the replicas" Casini et al., 2007, pag.1411; "The performance parameter is throughput (measured in useful packets received per slot) vs. load (measured in useful packets transmitted per slot" Casini et al., 2007, pag.1415
                     % ackdPacketCount = ackdPacketCount + numel(acked.source);
 
-                    % fprintf('Acked sources %f \n',acked.source); % TEST: delete this line after testing
-                    % fprintf('Queues status %f \n',queues.status); % TEST: delete this line after testing
                     fprintf('Acked sources\n'); % TEST: delete this line after testing
                     acked.source % TEST: delete this line after testing
                     fprintf('Queues status\n'); % TEST: delete this line after testing
                     queues.status % TEST: delete this line after testing
                     % update the confirmed packets' status
-                    % output.queues(sub2ind([input.sources max(queueLength)],transpose(acked.source),queues.status([acked.source]))) = 1; % TEST: delete this line after testing
                     output.queues(sub2ind(outputMatrixSize,transpose(acked.source),queues.status([acked.source]))) = 1;
                     output.delays(sub2ind(outputMatrixSize,transpose(acked.source),queues.status([acked.source]))) = output.duration;
                     for ii = 1:numel(acked.source)
