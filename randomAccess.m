@@ -1,6 +1,5 @@
-function [output] = randomAccess(numberOfSources,queueLength,linkMode)
-% function [in] = randomAccess(numberOfSources,queueLength,linkMode)
-% TODO: split the output structure in different variables [Issue: https://github.com/afcuttin/jsac/issues/47]
+function [outQueues,outDelays,outRetries,outFirstTx,outDuration,outRafLength,output] = randomAccess(numberOfSources,queueLength,linkMode)
+% function [outQueues,outDelays,outRetries,outFirstTx,outDuration,outRafLength,output] = randomAccess(numberOfSources,queueLength,linkMode)
 %
 % Simulation of Multiple Random Access
 %
@@ -14,12 +13,12 @@ function [output] = randomAccess(numberOfSources,queueLength,linkMode)
 % * input.fecRate: Forwar Error Correction rate; depends on the modulation scheme (type: double)
 %
 % Output
-%
-% output.queues: a logical matrix of input.sources rows and queueLength columns where each cell is set to 1 if the packet was successfully decoded or 0 if it was not
-% output.delays: a matrix of input.sources rows and queueLength columns where each cell is set to the index of the RAF in which the packet was successfully decoded
-% output.duration: the number of RAFs that have been generated to process all the input queues, needed to compute the average load and throughput
-
-
+% * outQueues: a logical matrix of numberOfSources rows and queueLength columns where each cell is set to 1 if the packet was successfully decoded or 0 if it was not
+% * outDelays: a matrix of numberOfSources rows and queueLength columns where each cell is set to the index of the RAF in which the packet was successfully decoded
+% * outRetries:
+% * outFirstTx:
+% * outDuration:
+% * outRafLength: the number of RAFs that have been generated to process all the input queues, needed to compute the average load and throughput
 
 validateattributes(numberOfSources,{'numeric'},{'integer','positive'},mfilename,'numberOfSources',1);
 validateattributes(queueLength,{'numeric'},{'vector','nonempty','integer','positive'},mfilename,'queueLength',2);
@@ -31,7 +30,7 @@ input.sources             = numberOfSources;
 input.linkMode            = linkMode;
 input.sinrThreshold       = 4; % value in dB
 input.rafLength           = 7;
-input.burstMaxRepetitions = 4;
+input.burstMaxRepetitions = 4; % NOTE: this is the retry limit, maybe rename to input.retryLimit
 input.bitsPerSymbol       = 3; % 8psk % NOTE: this parameter is no longer used
 input.fecRate             = 3/5; % NOTE: this parameter is no longer used
 
@@ -61,12 +60,12 @@ sicPar.minIter       = 1;
 %     capturePar.threshold = 2^(input.bitsPerSymbol * input.fecRate) - 1;
 % end
 
-    source.status = zeros(1,source.number);
-    % legit source statuses are always non-negative integers and equal to:
-    % 0: source has no packet ready to be transmitted (is idle)
-    % 1: source has a packet ready to be transmitted, either because new data must be sent or a previously collided packet has waited the backoff time
-    % integer greater than 1: source is backlogged due to previous packets collision, the integer value corresponds to the number of attempts made to get the latest burst acknowledged
-    output.duration = 0;
+source.status = zeros(1,source.number);
+% legit source statuses are always non-negative integers and equal to:
+% 0: source has no packet ready to be transmitted (is idle)
+% 1: source has a packet ready to be transmitted, either because new data must be sent or a previously collided packet has waited the backoff time
+% integer greater than 1: source is backlogged due to previous packets collision, the integer value corresponds to the number of attempts made to get the latest burst acknowledged
+output.duration = 0;
 
         switch input.linkMode
             case 'tul' % random access method is Coded Slotted Aloha
@@ -147,7 +146,13 @@ sicPar.minIter       = 1;
 
                     switch capturePar.accessMethod
                         case 'csa-p'
+                            % decoding
+                            [decRaf,decAcked] = decoding(raf,capturePar);
+                            % update acked bursts list
+                            acked.slot   = [acked.slot,decAcked.slot];
+                            acked.source = [acked.source,decAcked.source];
                         case 'csa-pip'
+                            % TODO: write the csa-pip mode [Issue: https://github.com/afcuttin/jsac/issues/48]
                         case 'csa'
                             while (sum(raf.slotStatus) > 0 && iter <= maxIter) || enterTheLoop
                                 enterTheLoop = false;
@@ -163,7 +168,7 @@ sicPar.minIter       = 1;
                                 iter = iter + 1;
                             end
                         otherwise
-                            body
+                            error('Please select one of the availables CSA modes.');
                     end
 
                     % check for duplicates
@@ -195,7 +200,7 @@ sicPar.minIter       = 1;
                     queues.status([acked.source]) = queues.status([acked.source]) + 1;
                     source.status([acked.source]) = 0; % update sources statuses
                     source.status(source.status < 0) = 0; % idle sources stay idle (see permitted statuses above)
-                    % memoryless process (no retransmission attempts)
+                    % memoryless process (no retransmission attempts) NOTE: this is probably equivalent to setting input.burstMaxRepetitions = 1
                     % queues.status = queues.status - 1;
                     % source.status = source.status - 1; % update sources statuses
                 end
@@ -374,3 +379,9 @@ sicPar.minIter       = 1;
             otherwise
                 error('Please select one of the availables link modes (tul, sul, sdl, tdl).');
         end
+outQueues    = output.queues;
+outDelays    = output.delays;
+outRetries   = output.retries;
+outFirstTx   = output.firstTx;
+outDuration  = output.duration;
+outRafLength = output.rafLength;
