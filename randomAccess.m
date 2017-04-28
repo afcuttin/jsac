@@ -1,5 +1,6 @@
 function [output] = randomAccess(numberOfSources,queueLength,linkMode)
-% function [in] = randomAccess(out)
+% function [in] = randomAccess(numberOfSources,queueLength,linkMode)
+% TODO: split the output structure in different variables [Issue: https://github.com/afcuttin/jsac/issues/47]
 %
 % Simulation of Multiple Random Access
 %
@@ -69,8 +70,7 @@ sicPar.minIter       = 1;
 
         switch input.linkMode
             case 'tul' % random access method is Coded Slotted Aloha
-% TODO: complete the TUL mode fourth (4) [Issue: https://github.com/afcuttin/jsac/issues/28]
-
+                % TODO: complete the TUL mode fourth (4) [Issue: https://github.com/afcuttin/jsac/issues/28]
                 % carico il file che contiene le probabilità di cattura
                 load('Captures_TUL_3','C_R_TUL_3','R_v','S_v');
                 capturePar.rateThrVec      = R_v;
@@ -145,18 +145,25 @@ sicPar.minIter       = 1;
                     iter         = 0;
                     enterTheLoop = true;
 
-                    while (sum(raf.slotStatus) > 0 && iter <= maxIter) || enterTheLoop
-                        enterTheLoop = false;
-                        % decoding
-                        [decRaf,decAcked] = decoding(raf,capturePar);
-                        % update acked bursts list
-                        acked.slot   = [acked.slot,decAcked.slot];
-                        acked.source = [acked.source,decAcked.source];
-                        % perform interference cancellation
-                        icRaf = ic(decRaf,decAcked);
-                        % start again
-                        raf = icRaf;
-                        iter = iter + 1;
+                    switch capturePar.accessMethod
+                        case 'csa-p'
+                        case 'csa-pip'
+                        case 'csa'
+                            while (sum(raf.slotStatus) > 0 && iter <= maxIter) || enterTheLoop
+                                enterTheLoop = false;
+                                % decoding
+                                [decRaf,decAcked] = decoding(raf,capturePar);
+                                % update acked bursts list
+                                acked.slot   = [acked.slot,decAcked.slot];
+                                acked.source = [acked.source,decAcked.source];
+                                % perform interference cancellation
+                                icRaf = ic(decRaf,decAcked);
+                                % start again
+                                raf = icRaf;
+                                iter = iter + 1;
+                            end
+                        otherwise
+                            body
                     end
 
                     % check for duplicates

@@ -1,3 +1,4 @@
+TODO: merge readme files (99) [Issue: https://github.com/afcuttin/jsac/issues/40]
 N_v: vettore del numero di sorgenti totali (desiderato +interferenti) nello slot (da 1 a 10)
 S_v: vettore delle soglie (in dB) sul SINR (da -10 a 10)
 R_v: vettore delle soglie sul tasso - nel senso di efficienza spetrale (modulazione e tasso del codice) (da 0.05 a 10)
