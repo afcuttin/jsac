@@ -1,3 +1,8 @@
+## Version 0.8.0:
+ - The outputs are now provided as separate variables
+ - added plots.m file (plus servicing)
+ - variable number of slices for CSA introduced
+
 ## Version 0.7.0:
  - minor fix
  - 'decoding' function help updated #31 #28 #6 #5
