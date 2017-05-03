@@ -47,7 +47,113 @@ switch capture.accessMethod
                 % skip this slot
             end
         end
-    case 'csa'
+    case 'csa-p' % csa solo una cattura in parallelo
+        % TODO: ultimare cattura in parallelo (1) [Issue: https://github.com/afcuttin/jsac/issues/49]
+        for si = 1:size(raf.status,1) % si means "source index" in this case
+            if sum(raf.status(si,:)) >= 1
+                % find the segments in the slices
+                segments         = find(raf.status(si,:) == 1);
+                numberOfSegments = numel(segments);
+                collided         = zeros(1,numberOfSegments);
+                for slin = 1:numberOfSegments
+                    collided(slin) = find(raf.status(:,slin) == 1)
+                end
+                % evaluate capture probability
+                if numberOfSegments == 3
+                    [~,rateThrInd] = min(abs(capture.rateThrVec - 2));
+                    captureExpThreshold = capture.probability3seg(collided(1),collided(2),collided(3),rateThrInd);
+                elseif numberOfSegments == 4
+                    [~,rateThrInd] = min(abs(capture.rateThrVec - 2/3));
+                    captureExpThreshold = capture.probability4seg(collided(1),collided(2),collided(3),collided(4),rateThrInd);
+                else
+                    error('There is something wrong with the number of segments');
+                end
+
+                captureExperiment = rand(1);
+
+                % if captureExperiment <= captureExpThreshold && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source) % NOTE: remember to remove this line after all the csa modes have been developed for 'tul'
+                if captureExperiment <= captureExpThreshold
+                    % update the list of acked bursts
+                    ackedBursts.slot   = [ackedBursts.slot,segments(1)];
+                    ackedBursts.source = [ackedBursts.source,si];
+                    % update the raf
+                    raf.status(segments,si) = 0;
+                    % sir has changed, update the slot status % NOTE: delete the following two lines, as they are useless in this scenario
+                    % raf.slotStatus(si) = 2;
+                    % raf.slotStatus % TEST: delete this line after testing
+                % elseif captureExperiment > captureExpThreshold && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source) % NOTE: remember to remove this line after all the csa modes have been developed for 'tul'
+                elseif captureExperiment > captureExpThreshold
+                    % niente da fare
+                    raf.slotStatus(si) = 0; % NOTE: necessario? direi di no
+                    % elseif captureExperiment > capture.probability(numCollided,capture.threshold) || raf.status(captured,si) ~= 1 || ismember(captured,ackedBursts.source) NOTE: remember to remove this line after all the csa modes have been developed for 'tul'
+                else
+                    error('Something bad happened');
+                end
+            end
+        end
+
+        % NOTE: all the following lines should be useless
+        %         if numberOfSegments == 3
+        %             [~,rateThrInd] = min(abs(capture.rateThrVec - 2));
+        %             collided % TEST: delete this line after testing
+        %             rateThrInd % TEST: delete this line after testing
+        %             if captureExperiment <= capture.probability3seg(collided(1),collided(2),collided(3),rateThrInd) && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source)
+        %                 % update the list of acked bursts
+        %                 ackedBursts.slot   = [ackedBursts.slot,si];
+        %                 ackedBursts.source = [ackedBursts.source,captured];
+        %                 % update the raf
+        %                 raf.status(captured,si)        = 0;
+        %                 % sir has changed, update the slot status
+        %                 raf.slotStatus(si) = 2;
+        %                 raf.slotStatus % TEST: delete this line after testing
+        %             elseif captureExperiment > capture.probability3seg(collided(1),collided(2),collided(3),rateThrInd) && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source)
+        %                 raf.slotStatus(si) = 0;
+        %             % elseif captureExperiment > capture.probability(numCollided,capture.threshold) || raf.status(captured,si) ~= 1 || ismember(captured,ackedBursts.source)
+        %             %     % niente da fare
+        %             else
+        %                 error('Something bad happened');
+        %             end
+        %         elseif numberOfSegments == 4
+
+        %             [~,rateThrInd] = min(abs(capture.rateThrVec - 2/3));
+        %             if captureExperiment <= capture.probability4seg(collided(1),collided(2),collided(3),collided(4),rateThrInd) && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source)
+        %                 % update the list of acked bursts
+        %                 ackedBursts.slot   = [ackedBursts.slot,si];
+        %                 ackedBursts.source = [ackedBursts.source,captured];
+        %                 % update the raf
+        %                 raf.status(captured,si)        = 0;
+        %                 % sir has changed, update the slot status
+        %                 raf.slotStatus(si) = 2;
+        %             elseif captureExperiment > capture.probability4seg(collided(1),collided(2),collided(3),collided(4),rateThrInd) && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source)
+        %                 % cannot decode/capture here any longer
+        %                 raf.slotStatus(si) = 0;
+        %             % elseif captureExperiment > capture.probability(numCollided,capture.threshold) || raf.status(captured,si) ~= 1 || ismember(captured,ackedBursts.source)
+        %             %     % niente da fare
+        %             else
+        %                 error('Something bad happened');
+        %             end
+        %         else
+
+        %             error('There is something wrong with the number of segments');
+        %         end
+        %     else % empty slot, only noise
+        %         % skip this slot
+        %     end
+        % end
+        %         % numCollided    = numel(collided)
+        %         % select one source to be captured and find the slot indices of its corresponding segments
+        %         % captured         = collided(randi(numCollided,1))
+        %         % assert(numel(captured) == 1,'there should be only one burst captured, there are %u instead',numel(captured));
+        %         % twinPcktCol      = raf.twins{ captured,si }
+        %         % numberOfSegments = numel(twinPcktCol)+1;
+        %         % evaluate number of colliding sources for every slot where the captured source has a segment
+        %         % raf.status(:,[si twinPcktCol]) % TEST: delete this line after testing
+        %         % raf.status(captured,:) % TEST: delete this line after testing
+        %         % collided         = [numCollided sum(raf.status(:,twinPcktCol) == 1)];
+        %         % assert(numberOfSegments == numel(collided));
+    case 'csa-pip' % csa con cattura in parallelo + cancellazione + cattura in parallelo
+        % TODO: write the csa-pip mode [Issue: https://github.com/afcuttin/jsac/issues/50]
+    case 'csa' % csa in serie per la cancellazione iterativa
         for si = 1:raf.length
             if sum(raf.status(:,si)) >= 1
 
@@ -116,5 +222,4 @@ switch capture.accessMethod
     otherwise
         error('Please select one of the availables access methods (csa, crdsa).');
 end
-
 outRandomAccessFrame = raf;
