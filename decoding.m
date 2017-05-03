@@ -56,7 +56,7 @@ switch capture.accessMethod
                 numberOfSegments = numel(segments);
                 collided         = zeros(1,numberOfSegments);
                 for slin = 1:numberOfSegments
-                    collided(slin) = find(raf.status(:,slin) == 1)
+                    collided(slin) = sum(raf.status(:,segments(slin)) == 1);
                 end
                 % evaluate capture probability
                 if numberOfSegments == 3
@@ -66,7 +66,7 @@ switch capture.accessMethod
                     [~,rateThrInd] = min(abs(capture.rateThrVec - 2/3));
                     captureExpThreshold = capture.probability4seg(collided(1),collided(2),collided(3),collided(4),rateThrInd);
                 else
-                    error('There is something wrong with the number of segments');
+                    error('There is something wrong with the number of segments, they are %u',numberOfSegments);
                 end
 
                 captureExperiment = rand(1);
@@ -77,7 +77,7 @@ switch capture.accessMethod
                     ackedBursts.slot   = [ackedBursts.slot,segments(1)];
                     ackedBursts.source = [ackedBursts.source,si];
                     % update the raf
-                    raf.status(segments,si) = 0;
+                    raf.status(si,segments) = 0;
                     % sir has changed, update the slot status % NOTE: delete the following two lines, as they are useless in this scenario
                     % raf.slotStatus(si) = 2;
                     % raf.slotStatus % TEST: delete this line after testing
@@ -158,12 +158,12 @@ switch capture.accessMethod
             if sum(raf.status(:,si)) >= 1
 
                 % find the number of collided sources
-                collided         = find(raf.status(:,si) == 1)
-                numCollided      = numel(collided)
+                collided         = find(raf.status(:,si) == 1);
+                numCollided      = numel(collided);
                 % select one source to be captured and find the slot indices of its corresponding segments
-                captured         = collided(randi(numCollided,1))
+                captured         = collided(randi(numCollided,1));
                 assert(numel(captured) == 1,'there should be only one burst captured, there are %u instead',numel(captured));
-                twinPcktCol      = raf.twins{ captured,si }
+                twinPcktCol      = raf.twins{ captured,si };
                 numberOfSegments = numel(twinPcktCol)+1;
                 % evaluate number of colliding sources for every slot where the captured source has a segment
                 % raf.status(:,[si twinPcktCol]) % TEST: delete this line after testing
