@@ -1,3 +1,8 @@
+## Version 0.9.0:
+ - TUL mode now working with CSA-P access method
+ - first version of 'csa-p'
+ - minor update to readme file
+
 ## Version 0.8.0:
  - The outputs are now provided as separate variables
  - added plots.m file (plus servicing)
