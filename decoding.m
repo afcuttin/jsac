@@ -48,7 +48,6 @@ switch capture.accessMethod
             end
         end
     case 'csa-p' % csa solo una cattura in parallelo
-        % TODO: ultimare cattura in parallelo (1) [Issue: https://github.com/afcuttin/jsac/issues/49]
         for si = 1:size(raf.status,1) % si means "source index" in this case
             if sum(raf.status(si,:)) >= 1
                 % find the segments in the slices
@@ -71,7 +70,6 @@ switch capture.accessMethod
 
                 captureExperiment = rand(1);
 
-                % if captureExperiment <= captureExpThreshold && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source) % NOTE: remember to remove this line after all the csa modes have been developed for 'tul'
                 if captureExperiment <= captureExpThreshold
                     % update the list of acked bursts
                     ackedBursts.slot   = [ackedBursts.slot,segments(1)];
@@ -81,11 +79,9 @@ switch capture.accessMethod
                     % sir has changed, update the slot status % NOTE: delete the following two lines, as they are useless in this scenario
                     % raf.slotStatus(si) = 2;
                     % raf.slotStatus % TEST: delete this line after testing
-                % elseif captureExperiment > captureExpThreshold && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source) % NOTE: remember to remove this line after all the csa modes have been developed for 'tul'
                 elseif captureExperiment > captureExpThreshold
                     % niente da fare
                     raf.slotStatus(si) = 0; % NOTE: necessario? direi di no
-                    % elseif captureExperiment > capture.probability(numCollided,capture.threshold) || raf.status(captured,si) ~= 1 || ismember(captured,ackedBursts.source) NOTE: remember to remove this line after all the csa modes have been developed for 'tul'
                 else
                     error('Something bad happened');
                 end

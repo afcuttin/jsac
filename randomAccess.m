@@ -262,13 +262,6 @@ output.duration = 0;
                     duplicatesExist = sum(count > 1) > 0;
                     assert(~duplicatesExist,'Error in the Successive Interference Cancellation process: one or more sources are acknowledged more than once');
 
-                    % pcktTransmissionAttempts = pcktTransmissionAttempts + sum(source.status == 1); % "the normalized MAC load G does not take into account the replicas" Casini et al., 2007, pag.1411; "The performance parameter is throughput (measured in useful packets received per slot) vs. load (measured in useful packets transmitted per slot" Casini et al., 2007, pag.1415
-                    % ackdPacketCount = ackdPacketCount + numel(acked.source);
-
-                    fprintf('Acked sources\n'); % TEST: delete this line after testing
-                    acked.source % TEST: delete this line after testing
-                    fprintf('Queues status\n'); % TEST: delete this line after testing
-                    queues.status % TEST: delete this line after testing
                     % update the confirmed packets' status
                     output.queues(sub2ind(outputMatrixSize,transpose(acked.source),queues.status([acked.source]))) = 1;
                     output.delays(sub2ind(outputMatrixSize,transpose(acked.source),queues.status([acked.source]))) = output.duration;
@@ -281,7 +274,6 @@ output.duration = 0;
 
                     % update the transmission queues
                     queues.status([acked.source]) = queues.status([acked.source]) + 1;
-                    source.status % TEST: delete this line after testing
                     source.status([acked.source]) = 0; % update sources statuses
                     assert(all(source.status >= 0) && all(source.status <= input.burstMaxRepetitions)) % TEST: delete this line after testing
                     source.status(source.status < 0) = 0; % idle sources stay idle (see permitted statuses above)
