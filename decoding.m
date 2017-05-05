@@ -17,7 +17,7 @@ ackedBursts.source = [];
 switch capture.accessMethod
     case 'crdsa'
         for si = 1:raf.length
-            % if sum(raf.receivedPower([1:end-1],si)) > 0
+            % if sum(raf.receivedPower([1:end-1],si)) > 0 % CLEAN:
             if sum(raf.status(:,si)) >= 1
                 collided = find(raf.status(:,si) == 1);
                 numCollided = numel(collided);
@@ -47,7 +47,7 @@ switch capture.accessMethod
                 % skip this slot
             end
         end
-    case 'csa-p' % csa solo una cattura in parallelo
+    case {'csa-p','csa-pip'} % csa con cattura in parallelo
         for si = 1:size(raf.status,1) % si means "source index" in this case
             if sum(raf.status(si,:)) >= 1
                 % find the segments in the slices
@@ -77,7 +77,7 @@ switch capture.accessMethod
                     % update the raf
                     raf.status(si,segments) = 0;
                     % sir has changed, update the slot status % NOTE: delete the following two lines, as they are useless in this scenario
-                    % raf.slotStatus(si) = 2;
+                    raf.slotStatus(si) = 2;
                     % raf.slotStatus % TEST: delete this line after testing
                 elseif captureExperiment > captureExpThreshold
                     % niente da fare
@@ -88,7 +88,7 @@ switch capture.accessMethod
             end
         end
 
-        % NOTE: all the following lines should be useless
+        % CLEAN: all the following lines should be useless
         %         if numberOfSegments == 3
         %             [~,rateThrInd] = min(abs(capture.rateThrVec - 2));
         %             collided % TEST: delete this line after testing
@@ -147,8 +147,6 @@ switch capture.accessMethod
         %         % raf.status(captured,:) % TEST: delete this line after testing
         %         % collided         = [numCollided sum(raf.status(:,twinPcktCol) == 1)];
         %         % assert(numberOfSegments == numel(collided));
-    case 'csa-pip' % csa con cattura in parallelo + cancellazione + cattura in parallelo
-        % TODO: write the csa-pip mode [Issue: https://github.com/afcuttin/jsac/issues/50]
     case 'csa' % csa in serie per la cancellazione iterativa
         for si = 1:raf.length
             if sum(raf.status(:,si)) >= 1

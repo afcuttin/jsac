@@ -11,6 +11,7 @@ function [outQueues,outDelays,outRetries,outFirstTx,outDuration,outRafLength,out
 % * input.rafLength: the length of the random access frame (RAF) (type: integer)
 % * input.bitsPerSymbol: depends on the modulation scheme (type: integer)
 % * input.fecRate: Forwar Error Correction rate; depends on the modulation scheme (type: double)
+% TODO: update randomAccess.m function help with correct type of inputs (99) [Issue: https://github.com/afcuttin/jsac/issues/51]
 %
 % Output
 % * outQueues: a logical matrix of numberOfSources rows and queueLength columns where each cell is set to 1 if the packet was successfully decoded or 0 if it was not
@@ -26,6 +27,7 @@ validatestring(linkMode,{'tul','sul','tdl','sdl'},mfilename,'linkMode',3);
 assert(iscolumn(queueLength),'Variable queueLength must be a column vector');
 assert((size(queueLength,1) == numberOfSources) || (size(queueLength,1) == 1),'The length of queueLength must be 1 or must be equal to numberOfSources');
 
+% NOTE: it could be good that the following input parameter could be configured from outside the funcion (maybe with a different configuration script that generates some .m file from which the variables are loaded)
 input.sources             = numberOfSources;
 input.linkMode            = linkMode;
 input.sinrThreshold       = 4; % value in dB
@@ -44,11 +46,11 @@ outputMatrixSize     = size(output.queues);
 % queste sono tutte le variabili ereditate dal vecchio codice, se possibile provvedere al refactoring
 source.number        = input.sources;
 % TODO: define a proper size of the RAF with respect to the number of actual sources [Issue: https://github.com/afcuttin/jsac/issues/4]
-raf.length           = input.rafLength; % Casini et al., 2007, pag.1413
-% simulationTime     = 1000; % total number of RAF
-% simulationTime     = 10; % for TEST purposes only - comment when doing the real thing
-% capturePar.status    = 3;
-% sicPar.maxIter     = 16;
+raf.length           = input.rafLength; % Casini et al., 2007, pag.1413 % CLEAN: deduplicate raf.length variable
+% simulationTime     = 1000; % total number of RAF % CLEAN: probably unnecessary
+% simulationTime     = 10; % for TEST purposes only - comment when doing the real thing % CLEAN: probably unnecessary
+% capturePar.status    = 3; % CLEAN: probably unnecessary
+% sicPar.maxIter     = 16; % CLEAN: probably unnecessary
 sicPar.maxIter       = 1;
 sicPar.minIter       = 1;
 % capturePar.criterion = 'power';
@@ -76,7 +78,7 @@ output.duration = 0;
                 capturePar.probability3seg = C_R_TUL_3;
                 load('Captures_TUL_4','C_R_TUL_4');
                 capturePar.probability4seg = C_R_TUL_4;
-                capturePar.accessMethod    = 'csa-p'; % NOTE: this setting can't be controlled from the output
+                capturePar.accessMethod    = 'csa-pip'; % NOTE: this setting can't be controlled from the output
 
                 while any(queues.status <= queueLength)
 
@@ -86,10 +88,11 @@ output.duration = 0;
                     raf.status      = zeros(source.number,raf.length); % memoryless
                     raf.slotStatus  = int8(zeros(1,raf.length));
                     raf.twins       = cell(source.number,raf.length);
-                    % changedSlots    = 0;
+                    % changedSlots    = 0; % CLEAN: dead variable
 
                     % create the RAF
                     % NOTE: prima di partire col ciclo, trovare le sorgenti che hanno ancora pacchetti in coda da smaltire, e ciclare solo su quelle, così si può eliminare il condizionale di 116 (4 righe più in basso)
+                    % NOTE: the following for cycle is used here and in the other link mode: it can be converted in a single function to prevent code duplication and problems in its update
                     for eachSource1 = 1:source.number
                         pcktRepExp = rand(1);
                         if pcktRepExp <= 1/3
@@ -141,7 +144,20 @@ output.duration = 0;
                             acked.slot   = [acked.slot,decAcked.slot];
                             acked.source = [acked.source,decAcked.source];
                         case 'csa-pip'
-                            % TODO: write the csa-pip mode [Issue: https://github.com/afcuttin/jsac/issues/48] (3)
+                            % decoding
+                            [decRaf,decAcked] = decoding(raf,capturePar);
+                            % update acked bursts list
+                            acked.slot   = [acked.slot,decAcked.slot];
+                            acked.source = [acked.source,decAcked.source];
+                            % perform interference cancellation (only once)
+                            icRaf = ic(decRaf,decAcked);
+                            % start again
+                            raf = icRaf;
+                            % decoding
+                            [decRaf,decAcked] = decoding(raf,capturePar);
+                            % update acked bursts list
+                            acked.slot   = [acked.slot,decAcked.slot];
+                            acked.source = [acked.source,decAcked.source];
                         case 'csa'
                             while (sum(raf.slotStatus) > 0 && iter <= maxIter) || enterTheLoop
                                 enterTheLoop = false;
@@ -285,7 +301,7 @@ output.duration = 0;
 
             case {'sdl','tdl'} % no random access, just capture threshold
 
-                if strcmp(input.linkMode,'sdl')
+                if strcmp(input.linkMode,'sdl') % NOTE: use switch - case here
                     load('Captures_SDL');
                     capturePar.probability = C_SDL;
                     capturePar.sinrThrVec  = S_v;
