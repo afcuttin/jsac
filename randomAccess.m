@@ -159,6 +159,8 @@ output.duration = 0;
                             acked.slot   = [acked.slot,decAcked.slot];
                             acked.source = [acked.source,decAcked.source];
                         case 'csa'
+                            iter         = 0;
+                            enterTheLoop = true;
                             while (sum(raf.slotStatus) > 0 && iter <= maxIter) || enterTheLoop
                                 enterTheLoop = false;
                                 % decoding

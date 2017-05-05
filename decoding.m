@@ -72,10 +72,10 @@ switch capture.accessMethod
 
                 if captureExperiment <= captureExpThreshold
                     % update the list of acked bursts
-                    ackedBursts.slot   = [ackedBursts.slot,segments(1)];
+                    ackedBursts.slot   = [ackedBursts.slot,segments(end)];
                     ackedBursts.source = [ackedBursts.source,si];
                     % update the raf
-                    raf.status(si,segments) = 0;
+                    raf.status(si,segments) = 0; % NOTE: should be segments(end) as written 3 lines above
                     % sir has changed, update the slot status % NOTE: delete the following two lines, as they are useless in this scenario
                     raf.slotStatus(si) = 2;
                     % raf.slotStatus % TEST: delete this line after testing
@@ -148,71 +148,123 @@ switch capture.accessMethod
         %         % collided         = [numCollided sum(raf.status(:,twinPcktCol) == 1)];
         %         % assert(numberOfSegments == numel(collided));
     case 'csa' % csa in serie per la cancellazione iterativa
-        for si = 1:raf.length
-            if sum(raf.status(:,si)) >= 1
+        % sort the sources in ascending order according to the slice where the last segment of a packet is transmitted
+        [srcs,slcs]       = ind2sub(size(raf.status),find(raf.status));
+        [srcsSor,srcsInd] = sort(srcs);
+        slcsByRow         = slcs(srcsInd); % slices where a segment is present are grouped by rows in the same array
+        [srcsDed,srcsOcc] = unique(srcsSor,'last'); % srcsOcc contains the last occurrence (that is, slice) where a segment of the corresponding source is present
+        lastSeg           = slcsByRow(srcsOcc);
+        [~,lastSegInd]    = sort(lastSeg);
+        srcsUns           = srcsSor(srcsOcc);
+        srcsSor           = srcsUns(lastSegInd);
 
-                % find the number of collided sources
-                collided         = find(raf.status(:,si) == 1);
-                numCollided      = numel(collided);
-                % select one source to be captured and find the slot indices of its corresponding segments
-                captured         = collided(randi(numCollided,1));
-                assert(numel(captured) == 1,'there should be only one burst captured, there are %u instead',numel(captured));
-                twinPcktCol      = raf.twins{ captured,si };
-                numberOfSegments = numel(twinPcktCol)+1;
-                % evaluate number of colliding sources for every slot where the captured source has a segment
-                % raf.status(:,[si twinPcktCol]) % TEST: delete this line after testing
-                raf.status(captured,:) % TEST: delete this line after testing
-                collided         = [numCollided sum(raf.status(:,twinPcktCol) == 1)];
-                assert(numberOfSegments == numel(collided));
+        for si = srcsSor % si means "source index" in this case
+            if sum(raf.status(si,:)) >= 1 % NOTE: this conditional is here to check that the current source has segments in the slices; therefore che condition should check against the (minimum) value of segments that a source can put in the frame
+                % find the segments in the slices
+                segments         = find(raf.status(si,:) == 1);
+                numberOfSegments = numel(segments);
+                collided         = zeros(1,numberOfSegments);
+                for slin = 1:numberOfSegments
+                    collided(slin) = sum(raf.status(:,segments(slin)) == 1);
+                end
+                % evaluate capture probability
+                if numberOfSegments == 3 % NOTE: the value '3' is hard-coded: the code may suffer in case the number of segments is changed
+                    [~,rateThrInd] = min(abs(capture.rateThrVec - 2));
+                    captureExpThreshold = capture.probability3seg(collided(1),collided(2),collided(3),rateThrInd);
+                elseif numberOfSegments == 4 % NOTE: the value '4' is hard-coded: the code may suffer in case the number of segments is changed
+                    [~,rateThrInd] = min(abs(capture.rateThrVec - 2/3));
+                    captureExpThreshold = capture.probability4seg(collided(1),collided(2),collided(3),collided(4),rateThrInd);
+                else
+                    error('There is something wrong with the number of segments, they are %u',numberOfSegments);
+                end
+
                 captureExperiment = rand(1);
 
-                if numberOfSegments == 3
-                    [~,rateThrInd] = min(abs(capture.rateThrVec - 2));
-                    collided % TEST: delete this line after testing
-                    rateThrInd % TEST: delete this line after testing
-                    if captureExperiment <= capture.probability3seg(collided(1),collided(2),collided(3),rateThrInd) && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source)
-                        % update the list of acked bursts
-                        ackedBursts.slot   = [ackedBursts.slot,si] % FIXME ripristinare ;
-                        ackedBursts.source = [ackedBursts.source,captured] % FIXME ripristinare ;
-                        % update the raf
-                        raf.status(captured,si)        = 0;
-                        % sir has changed, update the slot status
-                        raf.slotStatus(si) = 2;
-                        raf.slotStatus % TEST: delete this line after testing
-                    elseif captureExperiment > capture.probability3seg(collided(1),collided(2),collided(3),rateThrInd) && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source)
-                        raf.slotStatus(si) = 0 % FIXME ripristinare ;
-                    % elseif captureExperiment > capture.probability(numCollided,capture.threshold) || raf.status(captured,si) ~= 1 || ismember(captured,ackedBursts.source)
-                    %     % niente da fare
-                    else
-                        error('Something bad happened');
-                    end
-                elseif numberOfSegments == 4
-
-                    [~,rateThrInd] = min(abs(capture.rateThrVec - 2/3));
-                    if captureExperiment <= capture.probability4seg(collided(1),collided(2),collided(3),collided(4),rateThrInd) && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source)
-                        % update the list of acked bursts
-                        ackedBursts.slot   = [ackedBursts.slot,si];
-                        ackedBursts.source = [ackedBursts.source,captured];
-                        % update the raf
-                        raf.status(captured,si)        = 0;
-                        % sir has changed, update the slot status
-                        raf.slotStatus(si) = 2;
-                    elseif captureExperiment > capture.probability4seg(collided(1),collided(2),collided(3),collided(4),rateThrInd) && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source)
-                        % cannot decode/capture here any longer
-                        raf.slotStatus(si) = 0;
-                    % elseif captureExperiment > capture.probability(numCollided,capture.threshold) || raf.status(captured,si) ~= 1 || ismember(captured,ackedBursts.source)
-                    %     % niente da fare
-                    else
-                        error('Something bad happened');
-                    end
+                if captureExperiment <= captureExpThreshold
+                    % update the list of acked bursts
+                    ackedBursts.slot   = [ackedBursts.slot,segments(end)];
+                    ackedBursts.source = [ackedBursts.source,si];
+                    % update the raf
+                    raf.status(si,segments) = 0; % NOTE: should be segments(end) as written 3 lines above
+                    % sir has changed, update the slot status % NOTE: delete the following two lines, as they are useless in this scenario
+                    raf.slotStatus(si) = 2;
+                    % raf.slotStatus % TEST: delete this line after testing
+                elseif captureExperiment > captureExpThreshold
+                    % niente da fare
+                    raf.slotStatus(si) = 0; % NOTE: necessario? direi di no
                 else
-
-                    error('There is something wrong with the number of segments');
+                    error('Something bad happened');
                 end
-            else % empty slot, only noise
-                % skip this slot
             end
         end
+
+        % CLEAN: the following code should be useless
+
+        % for si = 1:raf.length
+        %     if sum(raf.status(:,si)) >= 1
+
+        %         % find the number of collided sources
+        %         collided         = find(raf.status(:,si) == 1);
+        %         numCollided      = numel(collided);
+        %         % select one source to be captured and find the slot indices of its corresponding segments
+        %         captured         = collided(randi(numCollided,1));
+        %         assert(numel(captured) == 1,'there should be only one burst captured, there are %u instead',numel(captured));
+        %         twinPcktCol      = raf.twins{ captured,si };
+        %         numberOfSegments = numel(twinPcktCol)+1;
+        %         % evaluate number of colliding sources for every slot where the captured source has a segment
+        %         % raf.status(:,[si twinPcktCol]) % TEST: delete this line after testing
+        %         raf.status(captured,:) % TEST: delete this line after testing
+        %         collided         = [numCollided sum(raf.status(:,twinPcktCol) == 1)];
+        %         assert(numberOfSegments == numel(collided));
+        %         captureExperiment = rand(1);
+
+        %         if numberOfSegments == 3
+        %             [~,rateThrInd] = min(abs(capture.rateThrVec - 2));
+        %             collided % TEST: delete this line after testing
+        %             rateThrInd % TEST: delete this line after testing
+        %             if captureExperiment <= capture.probability3seg(collided(1),collided(2),collided(3),rateThrInd) && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source)
+        %                 % update the list of acked bursts
+        %                 ackedBursts.slot   = [ackedBursts.slot,si] % FIXME ripristinare ;
+        %                 ackedBursts.source = [ackedBursts.source,captured] % FIXME ripristinare ;
+        %                 % update the raf
+        %                 raf.status(captured,si)        = 0;
+        %                 % sir has changed, update the slot status
+        %                 raf.slotStatus(si) = 2;
+        %                 raf.slotStatus % TEST: delete this line after testing
+        %             elseif captureExperiment > capture.probability3seg(collided(1),collided(2),collided(3),rateThrInd) && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source)
+        %                 raf.slotStatus(si) = 0 % FIXME ripristinare ;
+        %             % elseif captureExperiment > capture.probability(numCollided,capture.threshold) || raf.status(captured,si) ~= 1 || ismember(captured,ackedBursts.source)
+        %             %     % niente da fare
+        %             else
+        %                 error('Something bad happened');
+        %             end
+        %         elseif numberOfSegments == 4
+
+        %             [~,rateThrInd] = min(abs(capture.rateThrVec - 2/3));
+        %             if captureExperiment <= capture.probability4seg(collided(1),collided(2),collided(3),collided(4),rateThrInd) && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source)
+        %                 % update the list of acked bursts
+        %                 ackedBursts.slot   = [ackedBursts.slot,si];
+        %                 ackedBursts.source = [ackedBursts.source,captured];
+        %                 % update the raf
+        %                 raf.status(captured,si)        = 0;
+        %                 % sir has changed, update the slot status
+        %                 raf.slotStatus(si) = 2;
+        %             elseif captureExperiment > capture.probability4seg(collided(1),collided(2),collided(3),collided(4),rateThrInd) && raf.status(captured,si) == 1 && ~ismember(captured,ackedBursts.source)
+        %                 % cannot decode/capture here any longer
+        %                 raf.slotStatus(si) = 0;
+        %             % elseif captureExperiment > capture.probability(numCollided,capture.threshold) || raf.status(captured,si) ~= 1 || ismember(captured,ackedBursts.source)
+        %             %     % niente da fare
+        %             else
+        %                 error('Something bad happened');
+        %             end
+        %         else
+
+        %             error('There is something wrong with the number of segments');
+        %         end
+        %     else % empty slot, only noise
+        %         % skip this slot
+        %     end
+        % end
     otherwise
         error('Please select one of the availables access methods (csa, crdsa).');
 end
