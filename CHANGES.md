@@ -1,3 +1,7 @@
+## Version 0.10.0:
+ - 'csa-pip' mode now available
+ - Issues and code cleanup
+
 ## Version 0.9.0:
  - TUL mode now working with CSA-P access method
  - first version of 'csa-p'
