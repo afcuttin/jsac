@@ -31,7 +31,6 @@ assert((size(queueLength,1) == numberOfSources) || (size(queueLength,1) == 1),'T
 input.sources             = numberOfSources;
 input.linkMode            = linkMode;
 input.sinrThreshold       = 4; % value in dB
-input.rafLength           = 10;
 input.burstMaxRepetitions = 4; % NOTE: this is the retry limit, maybe rename to input.retryLimit
 input.bitsPerSymbol       = 3; % 8psk % NOTE: this parameter is no longer used
 input.fecRate             = 3/5; % NOTE: this parameter is no longer used
@@ -46,11 +45,7 @@ outputMatrixSize     = size(output.queues);
 % queste sono tutte le variabili ereditate dal vecchio codice, se possibile provvedere al refactoring
 source.number        = input.sources;
 % TODO: define a proper size of the RAF with respect to the number of actual sources [Issue: https://github.com/afcuttin/jsac/issues/4]
-raf.length           = input.rafLength; % Casini et al., 2007, pag.1413 % CLEAN: deduplicate raf.length variable
-% simulationTime     = 1000; % total number of RAF % CLEAN: probably unnecessary
-% simulationTime     = 10; % for TEST purposes only - comment when doing the real thing % CLEAN: probably unnecessary
-% capturePar.status    = 3; % CLEAN: probably unnecessary
-% sicPar.maxIter     = 16; % CLEAN: probably unnecessary
+raf.length           = 7;
 sicPar.maxIter       = 1;
 sicPar.minIter       = 1;
 % capturePar.criterion = 'power';
@@ -71,7 +66,6 @@ output.duration = 0;
 
         switch input.linkMode
             case 'tul' % random access method is Coded Slotted Aloha
-                % TODO: complete the TUL mode fourth (4) [Issue: https://github.com/afcuttin/jsac/issues/28]
                 % carico il file che contiene le probabilità di cattura
                 load('Captures_TUL_3','C_R_TUL_3','R_v');
                 capturePar.rateThrVec      = R_v;
@@ -88,7 +82,6 @@ output.duration = 0;
                     raf.status      = zeros(source.number,raf.length); % memoryless
                     raf.slotStatus  = int8(zeros(1,raf.length));
                     raf.twins       = cell(source.number,raf.length);
-                    % changedSlots    = 0; % CLEAN: dead variable
 
                     % create the RAF
                     % NOTE: prima di partire col ciclo, trovare le sorgenti che hanno ancora pacchetti in coda da smaltire, e ciclare solo su quelle, così si può eliminare il condizionale di 116 (4 righe più in basso)
