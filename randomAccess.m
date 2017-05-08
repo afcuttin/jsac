@@ -31,7 +31,7 @@ assert((size(queueLength,1) == numberOfSources) || (size(queueLength,1) == 1),'T
 input.sources             = numberOfSources;
 input.linkMode            = linkMode;
 input.sinrThreshold       = 4; % value in dB
-input.rafLength           = 7;
+input.rafLength           = 10;
 input.burstMaxRepetitions = 4; % NOTE: this is the retry limit, maybe rename to input.retryLimit
 input.bitsPerSymbol       = 3; % 8psk % NOTE: this parameter is no longer used
 input.fecRate             = 3/5; % NOTE: this parameter is no longer used
@@ -78,7 +78,7 @@ output.duration = 0;
                 capturePar.probability3seg = C_R_TUL_3;
                 load('Captures_TUL_4','C_R_TUL_4');
                 capturePar.probability4seg = C_R_TUL_4;
-                capturePar.accessMethod    = 'csa-pip'; % NOTE: this setting can't be controlled from the output
+                capturePar.accessMethod    = 'csa'; % NOTE: this setting can't be controlled from the output
 
                 while any(queues.status <= queueLength)
 
@@ -161,7 +161,7 @@ output.duration = 0;
                         case 'csa'
                             iter         = 0;
                             enterTheLoop = true;
-                            while (sum(raf.slotStatus) > 0 && iter <= maxIter) || enterTheLoop
+                            while (sum(raf.slotStatus) > 0 && iter <= sicPar.maxIter) || enterTheLoop
                                 enterTheLoop = false;
                                 % decoding
                                 [decRaf,decAcked] = decoding(raf,capturePar);
