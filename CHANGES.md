@@ -1,3 +1,9 @@
+## Version 1.0.0:
+ - code cleanup and issues closing
+ - "CSA" deconding mode available
+ - fixed bug in for loop
+ - csa mode almost ready
+
 ## Version 0.10.0:
  - 'csa-pip' mode now available
  - Issues and code cleanup
