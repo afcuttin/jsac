@@ -158,7 +158,7 @@ switch capture.accessMethod
         srcsUns           = srcsSor(srcsOcc);
         srcsSor           = srcsUns(lastSegInd);
 
-        for si = srcsSor % si means "source index" in this case
+        for si = transpose(srcsSor) % si means "source index" in this case
             if sum(raf.status(si,:)) >= 1 % NOTE: this conditional is here to check that the current source has segments in the slices; therefore che condition should check against the (minimum) value of segments that a source can put in the frame
                 % find the segments in the slices
                 segments         = find(raf.status(si,:) == 1);
