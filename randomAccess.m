@@ -21,6 +21,8 @@ function [outQueues,outDelays,outRetries,outFirstTx,outDuration,outRafLength,out
 % * outDuration:
 % * outRafLength: the number of RAFs that have been generated to process all the input queues, needed to compute the average load and throughput
 
+% TODO: assess the need of code deduplication (6) [Issue: https://github.com/afcuttin/jsac/issues/52]
+
 validateattributes(numberOfSources,{'numeric'},{'integer','positive'},mfilename,'numberOfSources',1);
 validateattributes(queueLength,{'numeric'},{'vector','nonempty','integer','positive'},mfilename,'queueLength',2);
 validatestring(linkMode,{'tul','sul','tdl','sdl'},mfilename,'linkMode',3);
@@ -48,8 +50,8 @@ source.number        = input.sources;
 raf.length           = 10;
 sicPar.maxIter       = 1;
 sicPar.minIter       = 1;
-% capturePar.criterion = 'power';
-% capturePar.type      = 'basic';
+% capturePar.criterion = 'power'; CLEAN: useless line of code
+% capturePar.type      = 'basic'; CLEAN: useless line of code
 
 % if strcmp(input.linkMode,'tul')
 %     capturePar.threshold = input.bitsPerSymbol * input.fecRate;
@@ -107,6 +109,7 @@ output.duration = 0;
                                 output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
                             elseif source.status(1,eachSource1) == 0 && enabledSources(eachSource1) == 0
                                 % stay idle
+                                % NOTE: the conditional on the probability is introduced in order to have a Poisson distribution of the arrivals (that is, transmission). However, the approach followed here does not result in a pure Poisson distribution. In fact, the random experiment is ran only for those sources that are idle (that is: they have a new packet to be sent) or have exceeded the retry limit. Backlogged sources are not subject to the random experiment and therefore can transmit their packet until it is acknowledged or the retry limit is exceeded. This is done to have a behaviour that is as close as possible to the way a real device works.
                             elseif source.status(1,eachSource1) >= 1 && source.status(1,eachSource1) < input.burstMaxRepetitions  % backlogged source
                                 source.status(1,eachSource1)      = source.status(1,eachSource1) + 1;
                                 [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
@@ -116,11 +119,15 @@ output.duration = 0;
                                 if queues.status(eachSource1) < queueLength(eachSource1)
                                     queues.status(eachSource1)        = queues.status(eachSource1) + 1; % permanently drop unconfirmed packet
                                     % proceed with the transmission of the next packet in the queue
-                                    source.status(1,eachSource1)      = 1;
-                                    [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
-                                    raf.status(eachSource1,pcktTwins) = 1;
-                                    raf.twins(eachSource1,:)          = rafRow;
-                                    output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
+                                    if enabledSources(eachSource1) == 1
+                                        source.status(1,eachSource1)      = 1;
+                                        [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
+                                        raf.status(eachSource1,pcktTwins) = 1;
+                                        raf.twins(eachSource1,:)          = rafRow;
+                                        output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
+                                    elseif enabledSources(eachSource1) == 0
+                                        source.status(1,eachSource1) = 0;
+                                    end
                                 elseif queues.status(eachSource1) == queueLength(eachSource1)
                                     % backlogged source, reached maximum number of attempts, discard the backlogged burst, which is also the last in the queue
                                     queues.status(eachSource1)   = queues.status(eachSource1) + 1;
@@ -237,6 +244,7 @@ output.duration = 0;
                                 output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
                             elseif source.status(1,eachSource1) == 0 && enabledSources(eachSource1) == 0
                                 % stay idle
+                                % NOTE: the conditional on the probability is introduced in order to have a Poisson distribution of the arrivals (that is, transmission). However, the approach followed here does not result in a pure Poisson distribution. In fact, the random experiment is ran only for those sources that are idle (that is: they have a new packet to be sent) or have exceeded the retry limit. Backlogged sources are not subject to the random experiment and therefore can transmit their packet until it is acknowledged or the retry limit is exceeded. This is done to have a behaviour that is as close as possible to the way a real device works.
                             elseif source.status(1,eachSource1) >= 1 && source.status(1,eachSource1) < input.burstMaxRepetitions  % backlogged source
                                 source.status(1,eachSource1)      = source.status(1,eachSource1) + 1;
                                 [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
@@ -246,11 +254,15 @@ output.duration = 0;
                                 if queues.status(eachSource1) < queueLength(eachSource1)
                                     queues.status(eachSource1)        = queues.status(eachSource1) + 1; % permanently drop unconfirmed packet
                                     % proceed with the transmission of the next packet in the queue
-                                    source.status(1,eachSource1)      = 1;
-                                    [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
-                                    raf.status(eachSource1,pcktTwins) = 1;
-                                    raf.twins(eachSource1,:)          = rafRow;
-                                    output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
+                                    if enabledSources(eachSource1) == 1
+                                        source.status(1,eachSource1)      = 1;
+                                        [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
+                                        raf.status(eachSource1,pcktTwins) = 1;
+                                        raf.twins(eachSource1,:)          = rafRow;
+                                        output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
+                                    elseif enabledSources(eachSource1) == 0
+                                        source.status(1,eachSource1) = 0;
+                                    end
                                 elseif queues.status(eachSource1) == queueLength(eachSource1)
                                     % backlogged source, reached maximum number of attempts, discard backlogged burst, which is also the last in the queue
                                     queues.status(eachSource1)   = queues.status(eachSource1) + 1;
@@ -299,7 +311,7 @@ output.duration = 0;
                     % update the transmission queues
                     queues.status([acked.source]) = queues.status([acked.source]) + 1;
                     source.status([acked.source]) = 0; % update sources statuses
-                    assert(all(source.status >= 0) && all(source.status <= input.burstMaxRepetitions)) % TEST: delete this line after testing
+                    assert(all(source.status >= 0) && all(source.status <= input.burstMaxRepetitions)) % NOTE: this check on the statuses is a duplicate of the one performed above: "error('Unlegit sourse status.')"
                     source.status(source.status < 0) = 0; % idle sources stay idle (see permitted statuses above)
                     % memoryless process (no retransmission attempts)
                     % queues.status = queues.status + 1;
