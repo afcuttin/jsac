@@ -4,13 +4,11 @@ clearvars;
 numberOfSources           = 10;
 queueLength               = 1000; % same queue length for every source
 queueLength               = randi([500 700],numberOfSources,1); % variable queue length
-% queueLength               = randi([3 6],numberOfSources,1);  % TEST: delete this line
 
 activeModes = {'tul','sul','sdl','tdl'}; % a cell array with any of the following: 'tul', terrestrial uplink, 'sul', satellite UL, 'sdl', satellite downlink, 'tdl', terrestrial DL
 
 fprintf('Results are stored in the "output" variable.\n');
 
-% TODO: every link mode shall be tested [Issue: https://github.com/afcuttin/jsac/issues/33] (9)
 for ii=1:numel(activeModes)
 	if any(strcmp('tul',activeModes(ii)))
 
