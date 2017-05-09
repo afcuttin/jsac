@@ -32,7 +32,7 @@ assert((size(queueLength,1) == numberOfSources) || (size(queueLength,1) == 1),'T
 % NOTE: it could be good that the following input parameter could be configured from outside the funcion (maybe with a different configuration script that generates some .m file from which the variables are loaded)
 input.sources             = numberOfSources;
 input.linkMode            = linkMode;
-input.sinrThreshold       = 4; % value in dB
+input.sinrThreshold       = 4; % value in dB NOTE: this parameter is no longer used
 input.burstMaxRepetitions = 4; % NOTE: this is the retry limit, maybe rename to input.retryLimit
 input.bitsPerSymbol       = 3; % 8psk % NOTE: this parameter is no longer used
 input.fecRate             = 3/5; % NOTE: this parameter is no longer used
@@ -50,14 +50,6 @@ source.number        = input.sources;
 raf.length           = 10;
 sicPar.maxIter       = 1;
 sicPar.minIter       = 1;
-% capturePar.criterion = 'power'; CLEAN: useless line of code
-% capturePar.type      = 'basic'; CLEAN: useless line of code
-
-% if strcmp(input.linkMode,'tul')
-%     capturePar.threshold = input.bitsPerSymbol * input.fecRate;
-% elseif strcmp(input.linkMode,'tdl') || strcmp(input.linkMode,'sdl') || strcmp(input.linkMode,'sul')
-%     capturePar.threshold = 2^(input.bitsPerSymbol * input.fecRate) - 1;
-% end
 
 source.status = zeros(1,source.number);
 % legit source statuses are always non-negative integers and equal to:
@@ -313,7 +305,7 @@ output.duration = 0;
                     source.status([acked.source]) = 0; % update sources statuses
                     assert(all(source.status >= 0) && all(source.status <= input.burstMaxRepetitions)) % NOTE: this check on the statuses is a duplicate of the one performed above: "error('Unlegit sourse status.')"
                     source.status(source.status < 0) = 0; % idle sources stay idle (see permitted statuses above)
-                    % memoryless process (no retransmission attempts)
+                    % memoryless process (no retransmission attempts) NOTE: this is probably equivalent to setting input.burstMaxRepetitions = 1
                     % queues.status = queues.status + 1;
                     % source.status = source.status - 1; % update sources statuses
                 end
@@ -321,14 +313,17 @@ output.duration = 0;
 
             case {'sdl','tdl'} % no random access, just capture threshold
 
-                if strcmp(input.linkMode,'sdl') % NOTE: use switch - case here
-                    load('Captures_SDL');
-                    capturePar.probability = C_SDL;
-                    capturePar.sinrThrVec  = S_v;
-                elseif strcmp(input.linkMode,'tdl')
-                    load('Captures_TDL');
-                    capturePar.probability = C_TDL;
-                    capturePar.sinrThrVec  = S_v;
+                switch input.linkMode
+                    case 'sdl'
+                        load('Captures_SDL');
+                        capturePar.probability = C_SDL;
+                        capturePar.sinrThrVec  = S_v;
+                    case 'tdl'
+                        load('Captures_TDL');
+                        capturePar.probability = C_TDL;
+                        capturePar.sinrThrVec  = S_v;
+                    otherwise
+                        % no need to throw an error
                 end
                 [~,sinrThrInd] = min(abs(capturePar.sinrThrVec - input.sinrThreshold));
 
