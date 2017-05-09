@@ -1,3 +1,9 @@
+## Version 1.1.0:
+ - some code cleanup
+ - The check on the probability of transmission is now extended to the sources that have exceeded the retry limit
+ - every mode can now be tested
+ - Probability of a new transmission can now be controlled to obtain a Poisson-ish arrival distribution
+
 ## Version 1.0.0:
  - code cleanup and issues closing
  - "CSA" deconding mode available
