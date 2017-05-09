@@ -8,7 +8,7 @@ function [outQueues,outDelays,outRetries,outFirstTx,outDuration,outRafLength,out
 % * queueLength: number of packets (burst) in the fifo queue for each source. The length must be the same for all sources (type: integer). Can be a scalar (all the queues have the same length) or a colum vector specifying different lengths
 % * linkMode: can be one of the following: 'tul', terrestrial uplink, 'sul', satellite UL, 'sdl', satellite downlink, 'tdl', terrestrial DL (type: string)
 % * input.sinrThreshold: value of the SINR threshold to be used (type: integer)
-% * input.rafLength: the length of the random access frame (RAF) (type: integer)
+% * input.rafLength: the length of the random access frame (RAF) (type: integer) NOTE: this input parameter is deprecated. It will be specified in another way
 % * input.bitsPerSymbol: depends on the modulation scheme (type: integer)
 % * input.fecRate: Forwar Error Correction rate; depends on the modulation scheme (type: double)
 % TODO: update randomAccess.m function help with correct type of inputs (99) [Issue: https://github.com/afcuttin/jsac/issues/51]
@@ -45,7 +45,7 @@ outputMatrixSize     = size(output.queues);
 % queste sono tutte le variabili ereditate dal vecchio codice, se possibile provvedere al refactoring
 source.number        = input.sources;
 % TODO: define a proper size of the RAF with respect to the number of actual sources [Issue: https://github.com/afcuttin/jsac/issues/4]
-raf.length           = 7;
+raf.length           = 10;
 sicPar.maxIter       = 1;
 sicPar.minIter       = 1;
 % capturePar.criterion = 'power';
@@ -86,6 +86,11 @@ output.duration = 0;
                     % create the RAF
                     % NOTE: prima di partire col ciclo, trovare le sorgenti che hanno ancora pacchetti in coda da smaltire, e ciclare solo su quelle, così si può eliminare il condizionale di 116 (4 righe più in basso)
                     % NOTE: the following for cycle is used here and in the other link mode: it can be converted in a single function to prevent code duplication and problems in its update
+                    if ~exist('sogliaPoisson','var') || sogliaPoisson == 1
+                        enabledSources = ones(source.number,1);
+                    elseif exist('sogliaPoisson','var')
+                        enabledSources = rand(source.number,1) <= sogliaPoisson;
+                    end
                     for eachSource1 = 1:source.number
                         pcktRepExp = rand(1);
                         if pcktRepExp <= 1/3
@@ -93,14 +98,15 @@ output.duration = 0;
                         elseif pcktRepExp <= (1/3 + 2/3)
                             numberOfBursts = 3;
                         end
-                        % TODO: inserire la possibilità di fare arrivi di Poisson [Issue: https://github.com/afcuttin/jsac/issues/22] (5)
                         if queues.status(eachSource1) <= queueLength(eachSource1)
-                            if source.status(1,eachSource1) == 0 % a new burst can be sent
+                            if source.status(1,eachSource1) == 0 && enabledSources(eachSource1) == 1 % a new burst can be sent
                                 source.status(1,eachSource1)      = 1;
                                 [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
                                 raf.status(eachSource1,pcktTwins) = 1;
                                 raf.twins(eachSource1,:)          = rafRow;
                                 output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
+                            elseif source.status(1,eachSource1) == 0 && enabledSources(eachSource1) == 0
+                                % stay idle
                             elseif source.status(1,eachSource1) >= 1 && source.status(1,eachSource1) < input.burstMaxRepetitions  % backlogged source
                                 source.status(1,eachSource1)      = source.status(1,eachSource1) + 1;
                                 [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
@@ -194,7 +200,7 @@ output.duration = 0;
                     % queues.status = queues.status - 1;
                     % source.status = source.status - 1; % update sources statuses
                 end
-                output.rafLength = input.rafLength;
+                output.rafLength = raf.length;
 
             case 'sul' % random access method is CRDSA
 
@@ -216,14 +222,21 @@ output.duration = 0;
 
                     % create the RAF
                     % NOTE: prima di partire col ciclo, trovare le sorgenti che hanno ancora pacchetti in coda da smaltire, e ciclare solo su quelle, così si può eliminare il condizionale di 116 (4 righe più in basso)
+                    if ~exist('sogliaPoisson','var') || sogliaPoisson == 1
+                        enabledSources = ones(source.number,1);
+                    elseif exist('sogliaPoisson','var')
+                        enabledSources = rand(source.number,1) <= sogliaPoisson;
+                    end
                     for eachSource1 = 1:source.number
                         if queues.status(eachSource1) <= queueLength(eachSource1)
-                            if source.status(1,eachSource1) == 0 % a new burst can be sent
+                            if source.status(1,eachSource1) == 0 && enabledSources(eachSource1) == 1 % a new burst can be sent
                                 source.status(1,eachSource1)      = 1;
                                 [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
                                 raf.status(eachSource1,pcktTwins) = 1;
                                 raf.twins(eachSource1,:)          = rafRow;
                                 output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
+                            elseif source.status(1,eachSource1) == 0 && enabledSources(eachSource1) == 0
+                                % stay idle
                             elseif source.status(1,eachSource1) >= 1 && source.status(1,eachSource1) < input.burstMaxRepetitions  % backlogged source
                                 source.status(1,eachSource1)      = source.status(1,eachSource1) + 1;
                                 [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
@@ -292,7 +305,7 @@ output.duration = 0;
                     % queues.status = queues.status + 1;
                     % source.status = source.status - 1; % update sources statuses
                 end
-                output.rafLength = input.rafLength;
+                output.rafLength = raf.length;
 
             case {'sdl','tdl'} % no random access, just capture threshold
 
@@ -324,25 +337,29 @@ output.duration = 0;
                     unsuccessfulSources = setdiff(unsuccessfulSources,[inactiveSources ; atEndOfQueue]);
                     assert(all(source.status <= input.burstMaxRepetitions + 1),'A source status is one unit too big');
 
-                    % TODO: inserire la possibilità di fare arrivi di Poisson (SDL e TDL) (5) [Issue: https://github.com/afcuttin/jsac/issues/39]
+                    if ~exist('sogliaPoisson','var') || sogliaPoisson == 1
+                        enabledSources = idleSources;
+                    elseif exist('sogliaPoisson','var')
+                        enabledSources = idleSources(find([rand(numel(idleSources),1) <= sogliaPoisson] ))
+                    end
                     % update the status of idle and unsuccessful sources
-                    source.status(idleSources)         = 1;
+                    source.status(enabledSources)         = 1;
                     source.status(unsuccessfulSources) = 1; % unsuccessful sources drop the current packet and move to the next one
                     source.status(atEndOfQueue)        = 0; % unsuccessful sources at the end of the queue drop the current packet and stay permanently idle
                     queues.status(unsuccessfulSources) = queues.status(unsuccessfulSources) + 1;
                     queues.status(atEndOfQueue)        = queues.status(atEndOfQueue) + 1;
 
                     % update the firstTx matrix
-                    output.firstTx(sub2ind(outputMatrixSize,transpose(idleSources),queues.status(idleSources)))                 = output.duration;
+                    output.firstTx(sub2ind(outputMatrixSize,transpose(enabledSources),queues.status(enabledSources)))                 = output.duration;
                     output.firstTx(sub2ind(outputMatrixSize,transpose(unsuccessfulSources),queues.status(unsuccessfulSources))) = output.duration;
 
                     % run the random experiment to determine successful packet reception (acknowledgment)
                     randomExperiments      = rand(input.sources,1);
                     successfulTransmission = randomExperiments <= capturePar.probability(sinrThrInd);
                     ackedSources           = find(successfulTransmission == 1);
-                    ackedSources           = setdiff(ackedSources,[inactiveSources ; atEndOfQueue]); % NOTE: it is probably better to setdiff between ackedSources and idleSources
+                    ackedSources           = setdiff(ackedSources,[inactiveSources ; atEndOfQueue]); % NOTE: it is probably better to setdiff between ackedSources and enabledSources
                     backlSources           = find(~successfulTransmission == 1);
-                    backlSources           = setdiff(backlSources,[inactiveSources ; atEndOfQueue]); % NOTE: it is probably better to setdiff between ackedSources and idleSources
+                    backlSources           = setdiff(backlSources,[inactiveSources ; atEndOfQueue]); % NOTE: it is probably better to setdiff between ackedSources and enabledSources
 
                     % update output matrices and transmission queues for acked sources
                     if ~isempty(ackedSources)
