@@ -1,4 +1,4 @@
-function [outQueues,outDelays,outRetries,outFirstTx,outDuration,outRafLength,output] = randomAccess(numberOfSources,queueLength,linkMode)
+function [outQueues,outDelays,outRetries,outFirstTx,outDuration,outRafLength,output] = randomAccess(numberOfSources,queueLength,linkMode,input)
 % function [outQueues,outDelays,outRetries,outFirstTx,outDuration,outRafLength,output] = randomAccess(numberOfSources,queueLength,linkMode)
 %
 % Simulation of Multiple Random Access
