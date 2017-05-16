@@ -6,8 +6,8 @@ end
 
 if all(all(input.queues == (input.delays == input.firstTx .* input.queues + (input.retries - 1)))) == 1
 	response = 'passed';
+	fprintf('Test %s \n',response);
 elseif all(all(input.queues == (input.delays == input.firstTx .* input.queues + (input.retries - 1))))  ~= 1
 	response = 'failed';
+	warning('Test %s \n',response);
 end
-
-fprintf('Test %s \n',response);

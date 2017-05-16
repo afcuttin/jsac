@@ -36,6 +36,7 @@ input.sinrThreshold       = 4; % value in dB NOTE: this parameter is no longer u
 input.burstMaxRepetitions = 4; % NOTE: this is the retry limit, maybe rename to input.retryLimit
 input.bitsPerSymbol       = 3; % 8psk % NOTE: this parameter is no longer used
 input.fecRate             = 3/5; % NOTE: this parameter is no longer used
+sogliaPoisson = 0.25
 
 queueLength          = queueLength .* ones(input.sources,1); % in any case, queueLength becomes a column vector
 queues.status        = ones(input.sources,1);
@@ -344,10 +345,12 @@ output.duration = 0;
                     unsuccessfulSources = setdiff(unsuccessfulSources,[inactiveSources ; atEndOfQueue]);
                     assert(all(source.status <= input.burstMaxRepetitions + 1),'A source status is one unit too big');
 
+                    % TODO: if sogliaPoisson is enabled, sdl and tdl fail the test (1) [Issue: https://github.com/afcuttin/jsac/issues/53]
                     if ~exist('sogliaPoisson','var') || sogliaPoisson == 1
                         enabledSources = idleSources;
                     elseif exist('sogliaPoisson','var')
-                        enabledSources = idleSources(find([rand(numel(idleSources),1) <= sogliaPoisson] ))
+                        % enabledSources = rand(source.number,1) <= sogliaPoisson; % così è nei casi precedenti
+                        enabledSources = idleSources(find([rand(numel(idleSources),1) <= sogliaPoisson] ));
                     end
                     % update the status of idle and unsuccessful sources
                     source.status(enabledSources)         = 1;
