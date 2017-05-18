@@ -1,4 +1,4 @@
-function [outQueues,outDelays,outRetries,outFirstTx,outDuration,outRafLength,output] = randomAccess(numberOfSources,queueLength,linkMode,input)
+function [outQueues,outDelays,outRetries,outFirstTx,outDuration,outRafLength,output] = randomAccess(numberOfSources,queueLength,linkMode,inputPars)
 % function [outQueues,outDelays,outRetries,outFirstTx,outDuration,outRafLength,output] = randomAccess(numberOfSources,queueLength,linkMode)
 %
 % Simulation of Multiple Random Access
@@ -7,10 +7,10 @@ function [outQueues,outDelays,outRetries,outFirstTx,outDuration,outRafLength,out
 % * numberOfSources: number of sources (type: integer)
 % * queueLength: number of packets (burst) in the fifo queue for each source. The length must be the same for all sources (type: integer). Can be a scalar (all the queues have the same length) or a colum vector specifying different lengths
 % * linkMode: can be one of the following: 'tul', terrestrial uplink, 'sul', satellite UL, 'sdl', satellite downlink, 'tdl', terrestrial DL (type: string)
-% * input.sinrThreshold: value of the SINR threshold to be used (type: integer)
-% * input.rafLength: the length of the random access frame (RAF) (type: integer) NOTE: this input parameter is deprecated. It will be specified in another way
-% * input.bitsPerSymbol: depends on the modulation scheme (type: integer)
-% * input.fecRate: Forwar Error Correction rate; depends on the modulation scheme (type: double)
+% * inputPars.sinrThreshold: value of the SINR threshold to be used (type: integer)
+% * inputPars.rafLength: the length of the random access frame (RAF) (type: integer) NOTE: this input parameter is deprecated. It will be specified in another way
+% * inputPars.bitsPerSymbol: depends on the modulation scheme (type: integer)
+% * inputPars.fecRate: Forwar Error Correction rate; depends on the modulation scheme (type: double)
 % TODO: update randomAccess.m function help with correct type of inputs (99) [Issue: https://github.com/afcuttin/jsac/issues/51]
 %
 % Output
@@ -30,36 +30,40 @@ assert(iscolumn(queueLength),'Variable queueLength must be a column vector');
 assert((size(queueLength,1) == numberOfSources) || (size(queueLength,1) == 1),'The length of queueLength must be 1 or must be equal to numberOfSources');
 
 % NOTE: it could be good that the following input parameter could be configured from outside the funcion (maybe with a different configuration script that generates some .m file from which the variables are loaded)
-input.sources             = numberOfSources;
-input.linkMode            = linkMode;
-input.sinrThreshold       = 4; % value in dB NOTE: this parameter is no longer used
-input.burstMaxRepetitions = 4; % NOTE: this is the retry limit, maybe rename to input.retryLimit
-input.bitsPerSymbol       = 3; % 8psk % NOTE: this parameter is no longer used
-input.fecRate             = 3/5; % NOTE: this parameter is no longer used
+% TODO: if the input struct is not defined, then define input defaults (3) [Issue: https://github.com/afcuttin/jsac/issues/54]
+if exist('inputPars','var')
+elseif ~exist('inputPars','var')
+    inputPars.sinrThreshold       = 4; % value in dB NOTE: this parameter is no longer used
+    inputPars.burstMaxRepetitions = 4; % NOTE: this is the retry limit, maybe rename to inputPars.retryLimit
+    inputPars.bitsPerSymbol       = 3; % 8psk % NOTE: this parameter is no longer used
+    inputPars.fecRate             = 3/5; % NOTE: this parameter is no longer used
+    inputPars.linkMode            = linkMode; % NOTE: resolve variable duplication
+    inputPars.sources             = numberOfSources; % NOTE: resolve variable duplication
+end
 sogliaPoisson = 0.25
-
-queueLength          = queueLength .* ones(input.sources,1); % in any case, queueLength becomes a column vector
-queues.status        = ones(input.sources,1);
-output.queues        = zeros(input.sources,max(queueLength));
-output.delays        = zeros(input.sources,max(queueLength));
-output.retries       = zeros(input.sources,max(queueLength));
-output.firstTx       = zeros(input.sources,max(queueLength));
-outputMatrixSize     = size(output.queues);
 % queste sono tutte le variabili ereditate dal vecchio codice, se possibile provvedere al refactoring
-source.number        = input.sources;
+source.number        = inputPars.sources;
 % TODO: define a proper size of the RAF with respect to the number of actual sources [Issue: https://github.com/afcuttin/jsac/issues/4]
 raf.length           = 10;
 sicPar.maxIter       = 1;
 sicPar.minIter       = 1;
 
-source.status = zeros(1,source.number);
+
+queueLength      = queueLength .* ones(inputPars.sources,1); % in any case, queueLength becomes a column vector
+queues.status    = ones(inputPars.sources,1);
+output.queues    = zeros(inputPars.sources,max(queueLength));
+output.delays    = zeros(inputPars.sources,max(queueLength));
+output.retries   = zeros(inputPars.sources,max(queueLength));
+output.firstTx   = zeros(inputPars.sources,max(queueLength));
+output.duration  = 0;
+outputMatrixSize = size(output.queues);
+source.status    = zeros(1,source.number);
 % legit source statuses are always non-negative integers and equal to:
 % 0: source has no packet ready to be transmitted (is idle)
 % 1: source has a packet ready to be transmitted, either because new data must be sent or a previously collided packet has waited the backoff time
 % integer greater than 1: source is backlogged due to previous packets collision, the integer value corresponds to the number of attempts made to get the latest burst acknowledged
-output.duration = 0;
 
-        switch input.linkMode
+        switch inputPars.linkMode
             case 'tul' % random access method is Coded Slotted Aloha
                 % carico il file che contiene le probabilità di cattura
                 load('Captures_TUL_3','C_R_TUL_3','R_v');
@@ -103,12 +107,12 @@ output.duration = 0;
                             elseif source.status(1,eachSource1) == 0 && enabledSources(eachSource1) == 0
                                 % stay idle
                                 % NOTE: the conditional on the probability is introduced in order to have a Poisson distribution of the arrivals (that is, transmission). However, the approach followed here does not result in a pure Poisson distribution. In fact, the random experiment is ran only for those sources that are idle (that is: they have a new packet to be sent) or have exceeded the retry limit. Backlogged sources are not subject to the random experiment and therefore can transmit their packet until it is acknowledged or the retry limit is exceeded. This is done to have a behaviour that is as close as possible to the way a real device works.
-                            elseif source.status(1,eachSource1) >= 1 && source.status(1,eachSource1) < input.burstMaxRepetitions  % backlogged source
+                            elseif source.status(1,eachSource1) >= 1 && source.status(1,eachSource1) < inputPars.burstMaxRepetitions  % backlogged source
                                 source.status(1,eachSource1)      = source.status(1,eachSource1) + 1;
                                 [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
                                 raf.status(eachSource1,pcktTwins) = 1;
                                 raf.twins(eachSource1,:)          = rafRow;
-                            elseif source.status(1,eachSource1) >= input.burstMaxRepetitions  % backlogged source, reached maximum retry limit, discard backlogged burst
+                            elseif source.status(1,eachSource1) >= inputPars.burstMaxRepetitions  % backlogged source, reached maximum retry limit, discard backlogged burst
                                 if queues.status(eachSource1) < queueLength(eachSource1)
                                     queues.status(eachSource1)        = queues.status(eachSource1) + 1; % permanently drop unconfirmed packet
                                     % proceed with the transmission of the next packet in the queue
@@ -196,7 +200,7 @@ output.duration = 0;
                     queues.status([acked.source]) = queues.status([acked.source]) + 1;
                     source.status([acked.source]) = 0; % update sources statuses
                     source.status(source.status < 0) = 0; % idle sources stay idle (see permitted statuses above)
-                    % memoryless process (no retransmission attempts) NOTE: this is probably equivalent to setting input.burstMaxRepetitions = 1
+                    % memoryless process (no retransmission attempts) NOTE: this is probably equivalent to setting inputPars.burstMaxRepetitions = 1
                     % queues.status = queues.status - 1;
                     % source.status = source.status - 1; % update sources statuses
                 end
@@ -207,7 +211,7 @@ output.duration = 0;
                 % carico il file che contiene le probabilità di cattura
                 load('Captures_SUL','C_SUL','S_v');
                 capturePar.probability    = C_SUL;
-                [~,capturePar.sinrThrInd] = min(abs(S_v - input.sinrThreshold));
+                [~,capturePar.sinrThrInd] = min(abs(S_v - inputPars.sinrThreshold));
                 capturePar.accessMethod   = 'crdsa';
                 numberOfBursts            = 2;
 
@@ -238,12 +242,12 @@ output.duration = 0;
                             elseif source.status(1,eachSource1) == 0 && enabledSources(eachSource1) == 0
                                 % stay idle
                                 % NOTE: the conditional on the probability is introduced in order to have a Poisson distribution of the arrivals (that is, transmission). However, the approach followed here does not result in a pure Poisson distribution. In fact, the random experiment is ran only for those sources that are idle (that is: they have a new packet to be sent) or have exceeded the retry limit. Backlogged sources are not subject to the random experiment and therefore can transmit their packet until it is acknowledged or the retry limit is exceeded. This is done to have a behaviour that is as close as possible to the way a real device works.
-                            elseif source.status(1,eachSource1) >= 1 && source.status(1,eachSource1) < input.burstMaxRepetitions  % backlogged source
+                            elseif source.status(1,eachSource1) >= 1 && source.status(1,eachSource1) < inputPars.burstMaxRepetitions  % backlogged source
                                 source.status(1,eachSource1)      = source.status(1,eachSource1) + 1;
                                 [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
                                 raf.status(eachSource1,pcktTwins) = 1;
                                 raf.twins(eachSource1,:)          = rafRow;
-                            elseif source.status(1,eachSource1) >= input.burstMaxRepetitions  % backlogged source, reached maximum retry limit, discard backlogged burst
+                            elseif source.status(1,eachSource1) >= inputPars.burstMaxRepetitions  % backlogged source, reached maximum retry limit, discard backlogged burst
                                 if queues.status(eachSource1) < queueLength(eachSource1)
                                     queues.status(eachSource1)        = queues.status(eachSource1) + 1; % permanently drop unconfirmed packet
                                     % proceed with the transmission of the next packet in the queue
@@ -304,9 +308,9 @@ output.duration = 0;
                     % update the transmission queues
                     queues.status([acked.source]) = queues.status([acked.source]) + 1;
                     source.status([acked.source]) = 0; % update sources statuses
-                    assert(all(source.status >= 0) && all(source.status <= input.burstMaxRepetitions)) % NOTE: this check on the statuses is a duplicate of the one performed above: "error('Unlegit sourse status.')"
+                    assert(all(source.status >= 0) && all(source.status <= inputPars.burstMaxRepetitions)) % NOTE: this check on the statuses is a duplicate of the one performed above: "error('Unlegit sourse status.')"
                     source.status(source.status < 0) = 0; % idle sources stay idle (see permitted statuses above)
-                    % memoryless process (no retransmission attempts) NOTE: this is probably equivalent to setting input.burstMaxRepetitions = 1
+                    % memoryless process (no retransmission attempts) NOTE: this is probably equivalent to setting inputPars.burstMaxRepetitions = 1
                     % queues.status = queues.status + 1;
                     % source.status = source.status - 1; % update sources statuses
                 end
@@ -314,7 +318,7 @@ output.duration = 0;
 
             case {'sdl','tdl'} % no random access, just capture threshold
 
-                switch input.linkMode
+                switch inputPars.linkMode
                     case 'sdl'
                         load('Captures_SDL');
                         capturePar.probability = C_SDL;
@@ -326,7 +330,7 @@ output.duration = 0;
                     otherwise
                         % no need to throw an error
                 end
-                [~,sinrThrInd] = min(abs(capturePar.sinrThrVec - input.sinrThreshold));
+                [~,sinrThrInd] = min(abs(capturePar.sinrThrVec - inputPars.sinrThreshold));
 
                 while any(queues.status <= queueLength)
 
@@ -337,13 +341,13 @@ output.duration = 0;
                     inactiveSources     = find(queues.status > queueLength);
                     idleSources         = find(source.status == 0);
                     idleSources         = setdiff(idleSources,inactiveSources);
-                    backloggedSources   = find(ismember(source.status,[1:1:input.burstMaxRepetitions]));
+                    backloggedSources   = find(ismember(source.status,[1:1:inputPars.burstMaxRepetitions]));
                     backloggedSources   = setdiff(backloggedSources,inactiveSources);
-                    unsuccessfulSources = find(source.status == input.burstMaxRepetitions + 1);
+                    unsuccessfulSources = find(source.status == inputPars.burstMaxRepetitions + 1);
                     atEndOfQueue        = find(queues.status == queueLength);
                     atEndOfQueue        = intersect(unsuccessfulSources,atEndOfQueue);
                     unsuccessfulSources = setdiff(unsuccessfulSources,[inactiveSources ; atEndOfQueue]);
-                    assert(all(source.status <= input.burstMaxRepetitions + 1),'A source status is one unit too big');
+                    assert(all(source.status <= inputPars.burstMaxRepetitions + 1),'A source status is one unit too big');
 
                     % TODO: if sogliaPoisson is enabled, sdl and tdl fail the test (1) [Issue: https://github.com/afcuttin/jsac/issues/53]
                     if ~exist('sogliaPoisson','var') || sogliaPoisson == 1
@@ -364,7 +368,7 @@ output.duration = 0;
                     output.firstTx(sub2ind(outputMatrixSize,transpose(unsuccessfulSources),queues.status(unsuccessfulSources))) = output.duration;
 
                     % run the random experiment to determine successful packet reception (acknowledgment)
-                    randomExperiments      = rand(input.sources,1);
+                    randomExperiments      = rand(inputPars.sources,1);
                     successfulTransmission = randomExperiments <= capturePar.probability(sinrThrInd);
                     ackedSources           = find(successfulTransmission == 1);
                     ackedSources           = setdiff(ackedSources,[inactiveSources ; atEndOfQueue]); % NOTE: it is probably better to setdiff between ackedSources and enabledSources
