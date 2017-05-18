@@ -81,7 +81,7 @@ source.status    = zeros(1,numberOfSources);
                 capturePar.probability4seg = C_R_TUL_4;
                 capturePar.accessMethod    = 'csa'; % NOTE: this setting can't be controlled from the output
 
-                while any(queues.status <= queueLength)
+                while any(queues.status <= queueLength) % TODO: the duration of the simulatio shall be traffic constrained or time constrained [Issue: https://github.com/afcuttin/jsac/issues/55]
 
                     assert(all(queues.status <= queueLength+1),'The number of confirmed packets shall not exceed the lenght of the queue.');
 
@@ -223,7 +223,7 @@ source.status    = zeros(1,numberOfSources);
                 capturePar.accessMethod   = 'crdsa';
                 numberOfBursts            = 2;
 
-                while any(queues.status <= queueLength)
+                while any(queues.status <= queueLength) % TODO: the duration of the simulatio shall be traffic constrained or time constrained [Issue: https://github.com/afcuttin/jsac/issues/57]
 
                     assert(all(queues.status <= queueLength+1),'The number of confirmed packets shall not exceed the lenght of the queue.');
 
@@ -340,7 +340,7 @@ source.status    = zeros(1,numberOfSources);
                 end
                 [~,sinrThrInd] = min(abs(capturePar.sinrThrVec - inputPars.sinrThreshold));
 
-                while any(queues.status <= queueLength)
+                while any(queues.status <= queueLength) % TODO: the duration of the simulatio shall be traffic constrained or time constrained [Issue: https://github.com/afcuttin/jsac/issues/56]
 
                     assert(all(queues.status <= queueLength+1),'The number of confirmed packets shall not exceed the lenght of the queue.');
                     output.duration = output.duration + 1; % in multiples of RAF
