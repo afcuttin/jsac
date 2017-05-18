@@ -1,3 +1,12 @@
+## Version 1.2.0:
+ - first working version of the plots script
+ - minor changes in the test script
+ - fixed bug in Poisson threshold; added input parameters' default values; some code cleanup
+ - changed struct name to avoid name of 'input' function
+ - Possible bug found (see todos)
+ - Started script to make some plots
+ - Changed the input parameters of the randomAccess function
+
 ## Version 1.1.0:
  - some code cleanup
  - The check on the probability of transmission is now extended to the sources that have exceeded the retry limit
