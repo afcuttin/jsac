@@ -1,3 +1,8 @@
+## Version 1.2.1:
+ -  fixed issue #58
+ - scripts for the simulation now compete, together with plotting script
+ - changed filenames
+
 ## Version 1.2.0:
  - first working version of the plots script
  - minor changes in the test script
