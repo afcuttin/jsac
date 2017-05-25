@@ -4,61 +4,22 @@ clearvars;
 numberOfSources            = 10;
 queueLength                = 1000; % same queue length for every source
 queueLength                = randi([500 700],numberOfSources,1); % variable queue length
-inputPars.poissonThreshold = 0.6;
+inputPars = [];
+% inputPars.poissonThreshold = 0.6;
 
 activeModes = {'tul','sul','sdl','tdl'}; % a cell array with any of the following: 'tul', terrestrial uplink, 'sul', satellite UL, 'sdl', satellite downlink, 'tdl', terrestrial DL
 
-fprintf('Results are stored in the "output" variable.\n');
+fprintf('Results are stored in the "results" variable.\n');
 
-for ii = activeModes
-	if any(strcmp('tul',ii))
-
-		[~,~,~,~,~,~,output] = randomAccess(numberOfSources,queueLength,'tul',inputPars);
-		% TODO: il calcolo del throughput deve essere differenziato a seconda che si usi CRDSA (slot) o CSA (slice). Per adesso sono uguali [Issue: https://github.com/afcuttin/jsac/issues/12] (8)
+for modeIndex = 1:numel(activeModes)
+		[~,~,~,~,~,~,output] = randomAccess(numberOfSources,queueLength,char(activeModes(modeIndex)),inputPars);
 		if numel(queueLength) == 1
-			TUL_Load = queueLength * numberOfSources ./ (output.rafLength * output.duration);
+			results(modeIndex).load = queueLength * numberOfSources ./ (output.rafLength * output.duration);
 		elseif iscolumn(queueLength)
-			TUL_Load = sum(queueLength) ./ (output.rafLength * output.duration);
+			results(modeIndex).load = sum(queueLength) ./ (output.rafLength * output.duration);
 		end
-		TUL_Throughput = sum(sum(output.queues,2)) ./ (output.rafLength * output.duration);
-		fprintf('TUL - Load %f Throughput %f \n',TUL_Load,TUL_Throughput);
+		results(modeIndex).throughput = sum(sum(output.queues,2)) ./ (output.rafLength * output.duration);
+		results(modeIndex).mode       = char(activeModes(modeIndex));
+		fprintf('Mode %s - Load %f Throughput %f \n',results(modeIndex).mode,results(modeIndex).load,results(modeIndex).throughput);
 		validateResults(queueLength,output);
-
-	elseif any(strcmp('sul',ii))
-
-		[~,~,~,~,~,~,output] = randomAccess(numberOfSources,queueLength,'sul');
-		if numel(queueLength) == 1
-			SUL_Load = queueLength * numberOfSources ./ (output.rafLength * output.duration);
-		elseif iscolumn(queueLength)
-			SUL_Load = sum(queueLength) ./ (output.rafLength * output.duration);
-		end
-		SUL_Throughput = sum(sum(output.queues,2)) ./ (output.rafLength * output.duration);
-		fprintf('SUL - Load %f Throughput %f \n',SUL_Load,SUL_Throughput);
-		validateResults(queueLength,output);
-
-	elseif any(strcmp('sdl',ii))
-
-		[~,~,~,~,~,~,output] = randomAccess(numberOfSources,queueLength,'sdl',inputPars);
-		if numel(queueLength) == 1
-			SDL_Load = queueLength * numberOfSources ./ (output.rafLength * output.duration);
-		elseif iscolumn(queueLength)
-			SDL_Load = sum(queueLength) ./ (output.rafLength * output.duration);
-		end
-		SDL_Throughput = sum(sum(output.queues,2)) ./ (output.rafLength * output.duration);
-		fprintf('SDL - Load %f Throughput %f \n',SDL_Load,SDL_Throughput);
-		validateResults(queueLength,output);
-
-	elseif any(strcmp('tdl',ii))
-
-		[~,~,~,~,~,~,output] = randomAccess(numberOfSources,queueLength,'tdl');
-		if numel(queueLength) == 1
-			TDL_Load = queueLength * numberOfSources ./ (output.rafLength * output.duration);
-		elseif iscolumn(queueLength)
-			TDL_Load = sum(queueLength) ./ (output.rafLength * output.duration);
-		end
-		TDL_Throughput = sum(sum(output.queues,2)) ./ (output.rafLength * output.duration);
-		fprintf('TDL - Load %f Throughput %f \n',TDL_Load,TDL_Throughput);
-		validateResults(queueLength,output);
-
-	end
 end
