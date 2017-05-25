@@ -372,8 +372,12 @@ source.status    = zeros(1,numberOfSources);
                     queues.status(atEndOfQueue)        = queues.status(atEndOfQueue) + 1;
 
                     % update the firstTx matrix
-                    output.firstTx(sub2ind(outputMatrixSize,transpose(enabledSources),queues.status(enabledSources)))                 = output.duration;
-                    output.firstTx(sub2ind(outputMatrixSize,transpose(unsuccessfulSources),queues.status(unsuccessfulSources))) = output.duration;
+                    if ~isempty(enabledSources)
+                        output.firstTx(sub2ind(outputMatrixSize,transpose(enabledSources),queues.status(enabledSources)))                 = output.duration;
+                    end
+                    if ~isempty(unsuccessfulSources)
+                        output.firstTx(sub2ind(outputMatrixSize,transpose(unsuccessfulSources),queues.status(unsuccessfulSources))) = output.duration;
+                    end
 
                     % run the random experiment to determine successful packet reception (acknowledgment)
                     randomExperiments      = rand(numberOfSources,1);
