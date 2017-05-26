@@ -3,23 +3,27 @@ function [outQueues,outDelays,outRetries,outFirstTx,outDuration,outRafLength,out
 %
 % Simulation of Multiple Random Access
 %
-% Input parameters:
-% * numberOfSources: number of sources (type: integer)
-% * queueLength: number of packets (burst) in the fifo queue for each source. The length must be the same for all sources (type: integer). Can be a scalar (all the queues have the same length) or a colum vector specifying different lengths
-% * linkMode: can be one of the following: 'tul', terrestrial uplink, 'sul', satellite UL, 'sdl', satellite downlink, 'tdl', terrestrial DL (type: string)
-% * inputPars.sinrThreshold: value of the SINR threshold to be used (type: integer)
-% * inputPars.rafLength: the length of the random access frame (RAF) (type: integer) NOTE: this input parameter is deprecated. It will be specified in another way
-% * inputPars.bitsPerSymbol: depends on the modulation scheme (type: integer)
-% * inputPars.fecRate: Forwar Error Correction rate; depends on the modulation scheme (type: double)
-% TODO: update randomAccess.m function help with correct type of inputs (99) [Issue: https://github.com/afcuttin/jsac/issues/51]
+% *** Input parameters:
 %
-% Output
-% * outQueues: a logical matrix of numberOfSources rows and queueLength columns where each cell is set to 1 if the packet was successfully decoded or 0 if it was not
-% * outDelays: a matrix of numberOfSources rows and queueLength columns where each cell is set to the index of the RAF in which the packet was successfully decoded
-% * outRetries:
-% * outFirstTx:
-% * outDuration:
-% * outRafLength: the number of RAFs that have been generated to process all the input queues, needed to compute the average load and throughput
+% * numberOfSources: number of sources (type: integer)
+% * queueLength:     number of packets (burst) in the fifo queue for each source. The length must be the same for all sources (type: integer). Can be a scalar (all the queues have the same length) or a colum vector specifying different lengths
+% * linkMode:        can be one of the following: 'tul', terrestrial uplink, 'sul', satellite UL, 'sdl', satellite downlink, 'tdl', terrestrial DL (type: string)
+%
+% The inputPars structure is not mandatory. If not specified, default parameters will be used.
+%
+% * inputPars.sinrThreshold:    value of the SINR threshold to be used (type: integer, default 4)
+% * inputPars.rafLength:        the length of the random access frame (RAF) (type: integer)
+% * inputPars.poissonThreshold: threshold for a random experiment that enables sources to transimt (type: real, default 1)
+% * inputPars.retryLimit:       number of transmission retries for a given data packet (type: integer, default 4)
+%
+% *** Outputs:
+%
+% * outQueues:    a logical matrix of numberOfSources rows and queueLength columns where each cell is set to 1 if the packet was successfully decoded or 0 if it was not
+% * outDelays:    a matrix of numberOfSources rows and queueLength columns where each cell is set to the index of the RAF in which the packet was successfully decoded
+% * outRetries:   a matrix of numberOfSources rows and queueLength columns where each cell is set to the number of times a packet has been sent in a RAF
+% * outFirstTx:   a matrix of numberOfSources rows and queueLength columns where each cell is set to the index of the RAF when the data packet has been transmitted for the first time
+% * outDuration:  the number of RAFs that have been generated to process all the input queues, needed to compute the average load and throughput
+% * outRafLength: the number of slots present in a RAF, used to compute the duration in slot
 
 % TODO: assess the need of code deduplication (6) [Issue: https://github.com/afcuttin/jsac/issues/52]
 
