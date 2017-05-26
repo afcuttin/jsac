@@ -1,3 +1,9 @@
+## Version 1.3.0:
+ - updated readme file and randomAccess funcion help
+ - removed simulation-parameters.md
+ - removed Readme.txt
+ - reduced code duplication in test script
+
 ## Version 1.2.1:
  -  fixed issue #58
  - scripts for the simulation now compete, together with plotting script
