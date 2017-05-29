@@ -36,14 +36,53 @@ elseif resultsExist == 0
 end
 
 if proceed == 1
-	set(groot,'defaultAxesColorOrder',[1 0 0;0 1 0;0 0 1],'defaultAxesLineStyleOrder','-|--|:')
+	set(groot,'defaultAxesColorOrder',[ 0 0.4470 0.7410; 0.8500 0.3250 0.0980 ; 0.9290 0.6940 0.1250 ; 0.4940 0.1840 0.5560 ; 0.4660 0.6740 0.1880 ; 0.3010 0.7450 0.9330 ; 0.6350 0.0780 0.1840],'defaultAxesLineStyleOrder','-|--|:|-.')
+
 	% plot throughput against load together with a scatterplot of the mean delay
 	for figind = unique({results.mode})
-		figure('Name',char(figind),'NumberTitle','off');
+		figure('Name',strcat(char(figind),' - Load, Throughput and Delay'),'NumberTitle','off');
 		hold on
+		title('Load, throughput and delay for different RAF lengths','FontWeight','normal')
+		legendInfo = cell(numel(find(strcmp(figind,{results.mode}))),1);
+		legendIndex = 1;
 		for ploind = find(strcmp(figind,{results.mode}))
 			plot(results(ploind).load, results(ploind).throughput);
-			scatter(results(ploind).load,results(ploind).throughput,40,(results(ploind).meanRetries),'filled');
+			legendInfo{legendIndex} = num2str(results(ploind).rafLength);
+			legendIndex = legendIndex + 1;
+		end
+		xlabel('Load')
+		ylabel('Throughput')
+		clrbr = colorbar;
+		ylabel(clrbr, 'Mean delay')
+		legend(legendInfo,'Location','NorthWest')
+
+		% scatterplot of the mean delay
+		for ploind = find(strcmp(figind,{results.mode}))
+			scatter(results(ploind).load,results(ploind).throughput,40,(results(ploind).meanDelay),'filled');
+		end
+	end
+
+	% plot delay against throughput together with a scatterplot of the load
+	for figind = unique({results.mode})
+		figure('Name',strcat(char(figind),' - Throughput and Delay'),'NumberTitle','off');
+		hold on
+		title('Throughput, mean delay and load for different RAF lengths','FontWeight','normal')
+		legendInfo = cell(numel(find(strcmp(figind,{results.mode}))),1);
+		legendIndex = 1;
+		for ploind = find(strcmp(figind,{results.mode}))
+			plot(results(ploind).throughput,results(ploind).meanDelay);
+			legendInfo{legendIndex} = num2str(results(ploind).rafLength);
+			legendIndex = legendIndex + 1;
+		end
+		xlabel('Throughput')
+		ylabel('Mean delay')
+		clrbr = colorbar;
+		ylabel(clrbr, 'Load')
+		legend(legendInfo,'Location','SouthEast')
+
+		% scatterplot of the mean load
+		for ploind = find(strcmp(figind,{results.mode}))
+			scatter(results(ploind).throughput,results(ploind).meanDelay,40,(results(ploind).load),'filled');
 		end
 	end
 
