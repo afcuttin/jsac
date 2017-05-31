@@ -14,6 +14,8 @@ function [outRandomAccessFrame,ackedBursts] = decoding(raf,capture)
 ackedBursts.slot   = [];
 ackedBursts.source = [];
 
+% TODO: the decoder shall support csa decoding without capture (1) [Issue: https://github.com/afcuttin/jsac/issues/59]
+% TODO: the decoder shall support crdsa decoding without capture (1) [Issue: https://github.com/afcuttin/jsac/issues/61]
 switch capture.accessMethod
     case 'crdsa'
         for si = 1:raf.length

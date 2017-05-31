@@ -15,6 +15,7 @@ function [outQueues,outDelays,outRetries,outFirstTx,outDuration,outRafLength,out
 % * inputPars.rafLength:        the length of the random access frame (RAF) (type: integer)
 % * inputPars.poissonThreshold: threshold for a random experiment that enables sources to transimt (type: real, default 1)
 % * inputPars.retryLimit:       number of transmission retries for a given data packet (type: integer, default 4)
+% * inputPars.timeConstraint:   the maximum allowed duration of a simulation, measured in slots (type: integer, default inf)
 %
 % *** Outputs:
 %
@@ -50,21 +51,26 @@ if exist('inputPars','var')
     if ~isfield(inputPars,'sinrThreshold')
         inputPars.sinrThreshold = 4;
     end
+    if ~isfield(inputPars,'timeConstraint')
+        inputPars.timeConstraint = inf(1);
+    end
 elseif ~exist('inputPars','var')
     inputPars.poissonThreshold = 1;
     inputPars.retryLimit       = 4;
     inputPars.sinrThreshold    = 4;
 % TODO: define a proper size of the RAF with respect to the number of actual sources [Issue: https://github.com/afcuttin/jsac/issues/4]
     raf.length                 = 10;
+    inputPars.timeConstraint   = inf(1);
 end
 % queste sono tutte le variabili ereditate dal vecchio codice, se possibile provvedere al refactoring
-sicPar.maxIter       = 1;
+sicPar.maxIter       = 2;
 sicPar.minIter       = 1;
 
 queueLength      = queueLength .* ones(numberOfSources,1); % in any case, queueLength becomes a column vector
 queues.status    = ones(numberOfSources,1);
 output.queues    = zeros(numberOfSources,max(queueLength));
 output.delays    = zeros(numberOfSources,max(queueLength));
+output.delaySlot = zeros(numberOfSources,max(queueLength));
 output.retries   = zeros(numberOfSources,max(queueLength));
 output.firstTx   = zeros(numberOfSources,max(queueLength));
 output.duration  = 0;
@@ -85,7 +91,7 @@ source.status    = zeros(1,numberOfSources);
                 capturePar.probability4seg = C_R_TUL_4;
                 capturePar.accessMethod    = 'csa'; % NOTE: this setting can't be controlled from the output
 
-                while any(queues.status <= queueLength) % TODO: the duration of the simulatio shall be traffic constrained or time constrained [Issue: https://github.com/afcuttin/jsac/issues/55]
+                while any(queues.status <= queueLength) && output.duration * raf.length < inputPars.timeConstraint
 
                     assert(all(queues.status <= queueLength+1),'The number of confirmed packets shall not exceed the lenght of the queue.');
 
@@ -227,7 +233,7 @@ source.status    = zeros(1,numberOfSources);
                 capturePar.accessMethod   = 'crdsa';
                 numberOfBursts            = 2;
 
-                while any(queues.status <= queueLength) % TODO: the duration of the simulatio shall be traffic constrained or time constrained [Issue: https://github.com/afcuttin/jsac/issues/57]
+                while any(queues.status <= queueLength) && output.duration * raf.length < inputPars.timeConstraint
 
                     assert(all(queues.status <= queueLength+1),'The number of confirmed packets shall not exceed the lenght of the queue.');
 
@@ -344,7 +350,7 @@ source.status    = zeros(1,numberOfSources);
                 end
                 [~,sinrThrInd] = min(abs(capturePar.sinrThrVec - inputPars.sinrThreshold));
 
-                while any(queues.status <= queueLength) % TODO: the duration of the simulatio shall be traffic constrained or time constrained [Issue: https://github.com/afcuttin/jsac/issues/56]
+                while any(queues.status <= queueLength) && output.duration * raf.length < inputPars.timeConstraint
 
                     assert(all(queues.status <= queueLength+1),'The number of confirmed packets shall not exceed the lenght of the queue.');
                     output.duration = output.duration + 1; % in multiples of RAF
