@@ -15,7 +15,6 @@ ackedBursts.slot   = [];
 ackedBursts.source = [];
 
 % TODO: the decoder shall support csa decoding without capture (1) [Issue: https://github.com/afcuttin/jsac/issues/59]
-% TODO: the decoder shall support crdsa decoding without capture (1) [Issue: https://github.com/afcuttin/jsac/issues/61]
 switch capture.accessMethod
     case 'crdsa'
         for si = 1:raf.length
@@ -43,6 +42,58 @@ switch capture.accessMethod
             else % empty slot, only noise
                 % skip this slot
             end
+        end
+    case 'crdsa-nc' % nc stands for No Capture (original CRDSA access method)
+        cleanBurstSlot  = find(sum(raf.status) == 1);
+
+        if numel(cleanBurstSlot) > 0
+            raf.slotStatus(cleanBurstSlot) = 1;
+            raf.slotStatus(raf.slotStatus == 2) = 0;
+            % while sum(raf.slotStatus == 1) ~= 0 && iterCounter <= sicParameters.maxIter
+                % iterCounter       = iterCounter + 1;
+                % cleanBurstSlot    = newCleanBurstSlot;
+                % newCleanBurstSlot = [];
+
+            ii = 1;
+            while ii <= numel(cleanBurstSlot)
+                cleanBurstRow = find(raf.status(:,cleanBurstSlot(ii)));
+                assert(numel(cleanBurstRow) == 1,'ci sono %u burst in questo slot, invece di uno soltanto',numel(cleanBurstRow)); % TEST: remove this line after testing
+                % update the list of acked bursts
+                ackedBursts.slot   = [ackedBursts.slot,cleanBurstSlot(ii)];
+                ackedBursts.source = [ackedBursts.source,cleanBurstRow];
+                % update raf
+                raf.status(cleanBurstRow,cleanBurstSlot(ii)) = 0;
+                % update slot status
+                raf.slotStatus(cleanBurstSlot(ii)) = 0;
+                % proceed with the possible clean twin removal
+                twinPcktCol = raf.twins{ cleanBurstRow,cleanBurstSlot(ii) };
+                for twinPcktIdx = 1:length(twinPcktCol)
+                    % raf.status(cleanBurstRow,twinPcktCol(twinPcktIdx)) = 0; % interference cancelation
+                    if sum(raf.status(:,twinPcktCol(twinPcktIdx))) == 1 % twin burst was a clean burst
+                        nonCollTwinInd = find(cleanBurstSlot == twinPcktCol(twinPcktIdx));
+                        if ~isempty(nonCollTwinInd)
+                            cleanBurstSlot(nonCollTwinInd) = []; %remove the twin burst from the acked bursts list
+                        end
+                        % nonCollTwinInd = find(newCleanBurstSlot == twinPcktCol(twinPcktIdx));
+                        % if ~isempty(nonCollTwinInd)
+                        %     newCleanBurstSlot(nonCollTwinInd) = []; %remove the twin burst from the acked bursts list
+                        % end
+                        % raf.slotStatus(twinPcktCol(twinPcktIdx)) = 0;
+                    % elseif sum(raf.status(:,twinPcktCol(twinPcktIdx))) == 1 % a new burst is clean, thanks to interference cancellation
+                    %     newCleanBurstSlot                        = [newCleanBurstSlot,twinPcktCol(twinPcktIdx)];
+                    %     raf.slotStatus(twinPcktCol(twinPcktIdx)) = 1;
+                    % elseif sum(raf.status(:,twinPcktCol(twinPcktIdx))) > 1 % at least two bursts are colliding, but the sir has changed
+                    %     raf.slotStatus(twinPcktCol(twinPcktIdx)) = 2;
+                    end
+                end
+                ii = ii + 1;
+            end
+            % end
+            outRandomAccessFrame = raf;
+        elseif numel(cleanBurstSlot) == 0
+            % warning('Nothing to do here, exiting')
+            raf.slotStatus(:)    = 0;
+            outRandomAccessFrame = raf;
         end
     case {'csa-p','csa-pip'} % csa con cattura in parallelo
         for si = 1:size(raf.status,1) % si means "source index" in this case
