@@ -14,7 +14,6 @@ function [outRandomAccessFrame,ackedBursts] = decoding(raf,capture)
 ackedBursts.slot   = [];
 ackedBursts.source = [];
 
-% TODO: the decoder shall support csa decoding without capture (1) [Issue: https://github.com/afcuttin/jsac/issues/59]
 switch capture.accessMethod
     case 'crdsa'
         for si = 1:raf.length
@@ -49,15 +48,10 @@ switch capture.accessMethod
         if numel(cleanBurstSlot) > 0
             raf.slotStatus(cleanBurstSlot) = 1;
             raf.slotStatus(raf.slotStatus == 2) = 0;
-            % while sum(raf.slotStatus == 1) ~= 0 && iterCounter <= sicParameters.maxIter
-                % iterCounter       = iterCounter + 1;
-                % cleanBurstSlot    = newCleanBurstSlot;
-                % newCleanBurstSlot = [];
 
             ii = 1;
             while ii <= numel(cleanBurstSlot)
                 cleanBurstRow = find(raf.status(:,cleanBurstSlot(ii)));
-                assert(numel(cleanBurstRow) == 1,'ci sono %u burst in questo slot, invece di uno soltanto',numel(cleanBurstRow)); % TEST: remove this line after testing
                 % update the list of acked bursts
                 ackedBursts.slot   = [ackedBursts.slot,cleanBurstSlot(ii)];
                 ackedBursts.source = [ackedBursts.source,cleanBurstRow];
@@ -74,16 +68,6 @@ switch capture.accessMethod
                         if ~isempty(nonCollTwinInd)
                             cleanBurstSlot(nonCollTwinInd) = []; %remove the twin burst from the acked bursts list
                         end
-                        % nonCollTwinInd = find(newCleanBurstSlot == twinPcktCol(twinPcktIdx));
-                        % if ~isempty(nonCollTwinInd)
-                        %     newCleanBurstSlot(nonCollTwinInd) = []; %remove the twin burst from the acked bursts list
-                        % end
-                        % raf.slotStatus(twinPcktCol(twinPcktIdx)) = 0;
-                    % elseif sum(raf.status(:,twinPcktCol(twinPcktIdx))) == 1 % a new burst is clean, thanks to interference cancellation
-                    %     newCleanBurstSlot                        = [newCleanBurstSlot,twinPcktCol(twinPcktIdx)];
-                    %     raf.slotStatus(twinPcktCol(twinPcktIdx)) = 1;
-                    % elseif sum(raf.status(:,twinPcktCol(twinPcktIdx))) > 1 % at least two bursts are colliding, but the sir has changed
-                    %     raf.slotStatus(twinPcktCol(twinPcktIdx)) = 2;
                     end
                 end
                 ii = ii + 1;
@@ -183,6 +167,17 @@ switch capture.accessMethod
                 end
             end
         end
+    case 'csa-nc' % nc stands for No Capture (original CSA access method)
+        [srcs,slcs]        = ind2sub(size(raf.status),find(raf.status));
+        [srcsSor,srcsInd]  = sort(srcs);
+        slcsByRow          = slcs(srcsInd); % slices where a segment is present are grouped by rows in the same array
+        clnSlcs            = find(sum(raf.status) == 1); % find clean slices
+        clnSrcsRaw         = srcsSor .* ismember(slcsByRow,clnSlcs); % find sources associated with clean slices
+        clnSrcs            = clnSrcsRaw(clnSrcsRaw ~= 0);
+        [counts,countsIdx] = histc(clnSrcs, unique(clnSrcs)); % evaluate number of clean slices for each source
+        ackedBursts.source = transpose(unique(clnSrcs(counts(countsIdx) >= 2))); % successfull sources in column
+        [~,~,slcsIdx]      = intersect(ackedBursts.source,clnSrcsRaw);
+        ackedBursts.slot   = transpose(slcsByRow(slcsIdx));
     otherwise
         error('Please select one of the availables access methods (csa, crdsa).');
 end
