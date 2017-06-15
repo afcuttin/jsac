@@ -54,17 +54,30 @@ if exist('inputPars','var')
     if ~isfield(inputPars,'timeConstraint')
         inputPars.timeConstraint = inf(1);
     end
+    if ~isfield(inputPars,'tulAccMeth')
+        inputPars.tulAccMeth = 'csa';
+    end
+    if ~isfield(inputPars,'sulAccMeth')
+        inputPars.sulAccMeth = 'crdsa';
+    end
+    if ~isfield(inputPars,'sicMaxIter')
+        inputPars.sicMaxIter = 2;
+    end
+    if ~isfield(inputPars,'sicMinIter')
+        inputPars.sicMinIter = 1;
+    end
 elseif ~exist('inputPars','var')
     inputPars.poissonThreshold = 1;
     inputPars.retryLimit       = 4;
     inputPars.sinrThreshold    = 4;
-% TODO: define a proper size of the RAF with respect to the number of actual sources [Issue: https://github.com/afcuttin/jsac/issues/4]
     raf.length                 = 10;
     inputPars.timeConstraint   = inf(1);
+    inputPar.tulAccMeth        = 'csa';
+    inputPar.sulAccMeth        = 'crdsa';
+    inputPars.sicMaxIter       = 2;
+    inputPars.sicMinIter       = 1;
 end
 % queste sono tutte le variabili ereditate dal vecchio codice, se possibile provvedere al refactoring
-sicPar.maxIter       = 2;
-sicPar.minIter       = 1;
 
 queueLength      = queueLength .* ones(numberOfSources,1); % in any case, queueLength becomes a column vector
 queues.status    = ones(numberOfSources,1);
@@ -89,16 +102,17 @@ source.status    = zeros(1,numberOfSources);
                 capturePar.probability3seg = C_R_TUL_3;
                 load('Captures_TUL_4','C_R_TUL_4');
                 capturePar.probability4seg = C_R_TUL_4;
-                capturePar.accessMethod    = 'csa'; % NOTE: this setting can't be controlled from the output
+                capturePar.accessMethod    = inputPars.tulAccMeth;
+                raf.numSegments            = 2; % number of segments in which a packet is split into, according to the CSA approach
 
                 while any(queues.status <= queueLength) && output.duration * raf.length < inputPars.timeConstraint
 
                     assert(all(queues.status <= queueLength+1),'The number of confirmed packets shall not exceed the lenght of the queue.');
 
                     output.duration = output.duration + 1; % in multiples of RAF
-                    raf.status      = zeros(numberOfSources,raf.length); % memoryless
-                    raf.slotStatus  = int8(zeros(1,raf.length));
-                    raf.twins       = cell(numberOfSources,raf.length);
+                    raf.status      = zeros(numberOfSources,raf.length * raf.numSegments); % memoryless
+                    raf.slotStatus  = int8(zeros(1,raf.length * raf.numSegments));
+                    raf.twins       = cell(numberOfSources,raf.length * raf.numSegments);
 
                     % create the RAF
                     % NOTE: prima di partire col ciclo, trovare le sorgenti che hanno ancora pacchetti in coda da smaltire, e ciclare solo su quelle, così si può eliminare il condizionale di 116 (4 righe più in basso)
@@ -118,7 +132,7 @@ source.status    = zeros(1,numberOfSources);
                         if queues.status(eachSource1) <= queueLength(eachSource1)
                             if source.status(1,eachSource1) == 0 && enabledSources(eachSource1) == 1 % a new burst can be sent
                                 source.status(1,eachSource1)      = 1;
-                                [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
+                                [pcktTwins,rafRow]                = generateTwins(raf.length * raf.numSegments,numberOfBursts);
                                 raf.status(eachSource1,pcktTwins) = 1;
                                 raf.twins(eachSource1,:)          = rafRow;
                                 output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
@@ -127,7 +141,7 @@ source.status    = zeros(1,numberOfSources);
                                 % NOTE: the conditional on the probability is introduced in order to have a Poisson distribution of the arrivals (that is, transmission). However, the approach followed here does not result in a pure Poisson distribution. In fact, the random experiment is ran only for those sources that are idle (that is: they have a new packet to be sent) or have exceeded the retry limit. Backlogged sources are not subject to the random experiment and therefore can transmit their packet until it is acknowledged or the retry limit is exceeded. This is done to have a behaviour that is as close as possible to the way a real device works.
                             elseif source.status(1,eachSource1) >= 1 && source.status(1,eachSource1) < inputPars.retryLimit  % backlogged source
                                 source.status(1,eachSource1)      = source.status(1,eachSource1) + 1;
-                                [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
+                                [pcktTwins,rafRow]                = generateTwins(raf.length * raf.numSegments,numberOfBursts);
                                 raf.status(eachSource1,pcktTwins) = 1;
                                 raf.twins(eachSource1,:)          = rafRow;
                             elseif source.status(1,eachSource1) >= inputPars.retryLimit  % backlogged source, reached maximum retry limit, discard backlogged burst
@@ -136,7 +150,7 @@ source.status    = zeros(1,numberOfSources);
                                     % proceed with the transmission of the next packet in the queue
                                     if enabledSources(eachSource1) == 1
                                         source.status(1,eachSource1)      = 1;
-                                        [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
+                                        [pcktTwins,rafRow]                = generateTwins(raf.length * raf.numSegments,numberOfBursts);
                                         raf.status(eachSource1,pcktTwins) = 1;
                                         raf.twins(eachSource1,:)          = rafRow;
                                         output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
@@ -179,10 +193,10 @@ source.status    = zeros(1,numberOfSources);
                             % update acked bursts list
                             acked.slot   = [acked.slot,decAcked.slot];
                             acked.source = [acked.source,decAcked.source];
-                        case 'csa'
+                        case {'csa','csa-nc'}
                             iter         = 0;
                             enterTheLoop = true;
-                            while (sum(raf.slotStatus) > 0 && iter <= sicPar.maxIter) || enterTheLoop
+                            while (((sum(raf.slotStatus) > 0) && (iter < inputPars.sicMaxIter)) || enterTheLoop)
                                 enterTheLoop = false;
                                 % decoding
                                 [decRaf,decAcked] = decoding(raf,capturePar);
@@ -230,17 +244,18 @@ source.status    = zeros(1,numberOfSources);
                 load('Captures_SUL','C_SUL','S_v');
                 capturePar.probability    = C_SUL;
                 [~,capturePar.sinrThrInd] = min(abs(S_v - inputPars.sinrThreshold));
-                capturePar.accessMethod   = 'crdsa';
+                capturePar.accessMethod   = inputPars.sulAccMeth;
                 numberOfBursts            = 2;
+                raf.numSegments           = 1; % number of segments in which a packet is split into, according to the CSA approach
 
                 while any(queues.status <= queueLength) && output.duration * raf.length < inputPars.timeConstraint
 
                     assert(all(queues.status <= queueLength+1),'The number of confirmed packets shall not exceed the lenght of the queue.');
 
                     output.duration = output.duration + 1; % in multiples of RAF
-                    raf.status      = zeros(numberOfSources,raf.length); % memoryless
-                    raf.slotStatus  = int8(zeros(1,raf.length));
-                    raf.twins       = cell(numberOfSources,raf.length);
+                    raf.status      = zeros(numberOfSources,raf.length * raf.numSegments); % memoryless
+                    raf.slotStatus  = int8(zeros(1,raf.length * raf.numSegments));
+                    raf.twins       = cell(numberOfSources,raf.length * raf.numSegments);
 
                     % create the RAF
                     % NOTE: prima di partire col ciclo, trovare le sorgenti che hanno ancora pacchetti in coda da smaltire, e ciclare solo su quelle, così si può eliminare il condizionale di 116 (4 righe più in basso)
@@ -253,7 +268,7 @@ source.status    = zeros(1,numberOfSources);
                         if queues.status(eachSource1) <= queueLength(eachSource1)
                             if source.status(1,eachSource1) == 0 && enabledSources(eachSource1) == 1 % a new burst can be sent
                                 source.status(1,eachSource1)      = 1;
-                                [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
+                                [pcktTwins,rafRow]                = generateTwins(raf.length * raf.numSegments,numberOfBursts);
                                 raf.status(eachSource1,pcktTwins) = 1;
                                 raf.twins(eachSource1,:)          = rafRow;
                                 output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
@@ -262,7 +277,7 @@ source.status    = zeros(1,numberOfSources);
                                 % NOTE: the conditional on the probability is introduced in order to have a Poisson distribution of the arrivals (that is, transmission). However, the approach followed here does not result in a pure Poisson distribution. In fact, the random experiment is ran only for those sources that are idle (that is: they have a new packet to be sent) or have exceeded the retry limit. Backlogged sources are not subject to the random experiment and therefore can transmit their packet until it is acknowledged or the retry limit is exceeded. This is done to have a behaviour that is as close as possible to the way a real device works.
                             elseif source.status(1,eachSource1) >= 1 && source.status(1,eachSource1) < inputPars.retryLimit  % backlogged source
                                 source.status(1,eachSource1)      = source.status(1,eachSource1) + 1;
-                                [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
+                                [pcktTwins,rafRow]                = generateTwins(raf.length * raf.numSegments,numberOfBursts);
                                 raf.status(eachSource1,pcktTwins) = 1;
                                 raf.twins(eachSource1,:)          = rafRow;
                             elseif source.status(1,eachSource1) >= inputPars.retryLimit  % backlogged source, reached maximum retry limit, discard backlogged burst
@@ -271,7 +286,7 @@ source.status    = zeros(1,numberOfSources);
                                     % proceed with the transmission of the next packet in the queue
                                     if enabledSources(eachSource1) == 1
                                         source.status(1,eachSource1)      = 1;
-                                        [pcktTwins,rafRow]                = generateTwins(raf.length,numberOfBursts);
+                                        [pcktTwins,rafRow]                = generateTwins(raf.length * raf.numSegments,numberOfBursts);
                                         raf.status(eachSource1,pcktTwins) = 1;
                                         raf.twins(eachSource1,:)          = rafRow;
                                         output.firstTx(eachSource1,queues.status(eachSource1)) = output.duration;
@@ -294,7 +309,7 @@ source.status    = zeros(1,numberOfSources);
                     iter         = 0;
                     enterTheLoop = true;
 
-                    while (sum(raf.slotStatus) > 0 && iter <= sicPar.maxIter) || enterTheLoop
+                    while (sum(raf.slotStatus) > 0 && iter < inputPars.sicMaxIter) || enterTheLoop
                         enterTheLoop = false;
                         % decoding
                         [decRaf,decAcked] = decoding(raf,capturePar);
