@@ -52,6 +52,7 @@ if proceed == 1
 		end
 		xlabel('Load')
 		ylabel('Throughput')
+		colormap jet;
 		clrbr = colorbar;
 		ylabel(clrbr, 'Mean delay')
 		legend(legendInfo,'Location','NorthWest')
