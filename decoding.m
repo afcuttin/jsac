@@ -175,9 +175,16 @@ switch capture.accessMethod
         clnSrcsRaw         = srcsSor .* ismember(slcsByRow,clnSlcs); % find sources associated with clean slices
         clnSrcs            = clnSrcsRaw(clnSrcsRaw ~= 0);
         [counts,countsIdx] = histc(clnSrcs, unique(clnSrcs)); % evaluate number of clean slices for each source
-        ackedBursts.source = transpose(unique(clnSrcs(counts(countsIdx) >= 2))); % successfull sources in column
+        ackedBursts.source = transpose(unique(clnSrcs(counts(countsIdx) >= raf.numSegments))); % successfull sources in column
         [~,~,slcsIdx]      = intersect(ackedBursts.source,clnSrcsRaw);
         ackedBursts.slot   = transpose(slcsByRow(slcsIdx));
+        % update raf
+        if ~isempty(ackedBursts.source)
+            raf.status(sub2ind(size(raf.status),ackedBursts.source,ackedBursts.slot)) = 0;
+        end
+        % reset slot statuses
+        raf.slotStatus(:) = 0;
+        outRandomAccessFrame = raf;
     otherwise
         error('Please select one of the availables access methods (csa, crdsa).');
 end
