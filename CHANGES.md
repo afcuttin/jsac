@@ -1,3 +1,15 @@
+## Version 1.4.0:
+ - ancillary files updated
+ - capture files updated, choice of rates for csa improved
+ - minor adjustments
+ - Defaults setting; slot/slice clarification
+ - Completed the 'csa-nc' decoding mode
+ - original CSA access method now supported
+ - original crdsa now supported
+ - added input parameter to limit the time of simulation to a given number of slots
+ - added some tweaks to the simulate.m script
+ - script for simulations now ready to be used
+
 ## Version 1.3.0:
  - updated readme file and randomAccess funcion help
  - removed simulation-parameters.md
