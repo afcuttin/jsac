@@ -49,7 +49,7 @@ if exist('inputPars','var')
         inputPars.retryLimit = 4;
     end
     if ~isfield(inputPars,'sinrThreshold')
-        inputPars.sinrThreshold = 4;
+        inputPars.sinrThreshold = 2.23;
     end
     if ~isfield(inputPars,'timeConstraint')
         inputPars.timeConstraint = inf(1);
@@ -69,11 +69,11 @@ if exist('inputPars','var')
 elseif ~exist('inputPars','var')
     inputPars.poissonThreshold = 1;
     inputPars.retryLimit       = 4;
-    inputPars.sinrThreshold    = 4;
+    inputPars.sinrThreshold    = 2.23;
     raf.length                 = 10;
     inputPars.timeConstraint   = inf(1);
-    inputPar.tulAccMeth        = 'csa';
-    inputPar.sulAccMeth        = 'crdsa';
+    inputPars.tulAccMeth       = 'csa';
+    inputPars.sulAccMeth       = 'crdsa';
     inputPars.sicMaxIter       = 2;
     inputPars.sicMinIter       = 1;
 end
@@ -105,6 +105,15 @@ source.status    = zeros(1,numberOfSources);
                 capturePar.accessMethod    = inputPars.tulAccMeth;
                 raf.numSegments            = 2; % number of segments in which a packet is split into, according to the CSA approach
 
+                capturePar.bit_per_symbol=2;
+                slices=raf.numSegments;
+                capturePar.rt_ind=zeros(1,4);
+                for i=3:4,
+                    rd=capturePar.rateThrVec-raf.numSegments*capturePar.bit_per_symbol/i;
+                    [rda,rdb]=find((rd<0));
+                    capturePar.rt_ind(i)=max(rdb);
+                end
+
                 while any(queues.status <= queueLength) && output.duration * raf.length < inputPars.timeConstraint
 
                     assert(all(queues.status <= queueLength+1),'The number of confirmed packets shall not exceed the lenght of the queue.');
@@ -113,6 +122,7 @@ source.status    = zeros(1,numberOfSources);
                     raf.status      = zeros(numberOfSources,raf.length * raf.numSegments); % memoryless
                     raf.slotStatus  = int8(zeros(1,raf.length * raf.numSegments));
                     raf.twins       = cell(numberOfSources,raf.length * raf.numSegments);
+                    raf.captureAttempts = zeros(numberOfSources,1);
 
                     % create the RAF
                     % NOTE: prima di partire col ciclo, trovare le sorgenti che hanno ancora pacchetti in coda da smaltire, e ciclare solo su quelle, così si può eliminare il condizionale di 116 (4 righe più in basso)
@@ -124,9 +134,9 @@ source.status    = zeros(1,numberOfSources);
                     end
                     for eachSource1 = 1:numberOfSources
                         pcktRepExp = rand(1);
-                        if pcktRepExp <= 1/3
+                        if pcktRepExp > 2/3
                             numberOfBursts = 4;
-                        elseif pcktRepExp <= (1/3 + 2/3)
+                        elseif pcktRepExp <= 2/3
                             numberOfBursts = 3;
                         end
                         if queues.status(eachSource1) <= queueLength(eachSource1)
@@ -256,6 +266,7 @@ source.status    = zeros(1,numberOfSources);
                     raf.status      = zeros(numberOfSources,raf.length * raf.numSegments); % memoryless
                     raf.slotStatus  = int8(zeros(1,raf.length * raf.numSegments));
                     raf.twins       = cell(numberOfSources,raf.length * raf.numSegments);
+                    raf.captureAttempts = zeros(numberOfSources,1);
 
                     % create the RAF
                     % NOTE: prima di partire col ciclo, trovare le sorgenti che hanno ancora pacchetti in coda da smaltire, e ciclare solo su quelle, così si può eliminare il condizionale di 116 (4 righe più in basso)
