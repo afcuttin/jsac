@@ -4,7 +4,7 @@ proceed = 0;
 if resultsExist == 1
 	prompt = 'Do you want to load results different from the existing ones? y/n [n]: ';
 	str = input(prompt,'s');
-	if isempty(str)
+	if isempty(str) || str == 'n'
 	    str = 'n';
 	    fprintf('I will plot existing result.\n');
 	    proceed = 1;
